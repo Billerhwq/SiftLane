@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Siftlane — Wire Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--paper:#f1f2ed;--sheet:#fbfcf8;--ink:#151718;--muted:#656963;--rule:#c9ccc4;--rule-dark:#999e96;--red:#e34a2b;--red-dark:#bb321b;--blue:#2457c6;--blue-soft:#e8edfa;--green:#147d4a;--amber:#ad650c;--rail:#e4e6e0}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-width:1100px;height:100%;background:var(--paper);color:var(--ink);font-family:Archivo,"PingFang SC","Microsoft YaHei",sans-serif}
+    button,input,textarea{font:inherit}
+    button{cursor:pointer}
+    button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+    .app{display:grid;height:100vh;min-height:760px;grid-template-columns:238px minmax(620px,1fr) 316px;grid-template-rows:68px 72px minmax(0,1fr);overflow:hidden}
+    .mast{grid-column:1/-1;display:grid;grid-template-columns:238px 1fr auto;align-items:center;border-bottom:1px solid var(--ink);background:var(--sheet)}
+    .brand{display:flex;height:100%;align-items:center;gap:12px;padding:0 18px;border-right:1px solid var(--ink)}
+    .brand-mark{display:grid;width:34px;height:34px;place-items:center;background:var(--red);color:white;font-weight:800;letter-spacing:0}
+    .brand strong{font-size:20px;letter-spacing:.04em}
+    .edition{display:flex;align-items:center;gap:16px;padding:0 22px;color:var(--muted);font:500 11px/1 JetBrains Mono,monospace;text-transform:uppercase}
+    .edition b{color:var(--ink);font-weight:600}
+    .mast-actions{display:flex;align-items:center;gap:8px;padding-right:16px}
+    .icon-button,.ghost,.primary{display:inline-flex;height:36px;align-items:center;justify-content:center;gap:8px;border:1px solid var(--ink);background:transparent;color:var(--ink);font-size:12px;font-weight:700}
+    .icon-button{width:36px;padding:0}
+    .primary{padding:0 15px;border-color:var(--red);background:var(--red);color:white}
+    .primary:hover{background:var(--red-dark)}
+    .ghost{padding:0 13px}
+    svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .status{grid-column:1/-1;display:grid;grid-template-columns:238px 180px 148px 1fr;background:var(--sheet);border-bottom:1px solid var(--ink)}
+    .status>div{display:flex;min-width:0;align-items:center;gap:10px;padding:10px 16px;border-right:1px solid var(--rule)}
+    .status .engine{border-right:1px solid var(--ink)}
+    .status-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px #dceee4}
+    .status-copy{display:flex;min-width:0;flex-direction:column;gap:3px}
+    .status-copy strong{font-size:12px}
+    .status-copy small,.stat small{color:var(--muted);font:500 10px/1.2 JetBrains Mono,monospace}
+    .stat{flex-direction:column!important;align-items:flex-start!important;justify-content:center;gap:4px!important}
+    .stat b{font:700 20px/1 Archivo,sans-serif}
+    .live-strip{position:relative;gap:12px!important;border-right:0!important}
+    .live-strip .pulse{color:var(--blue)}
+    .live-strip .status-copy{flex:1}
+    .live-strip .status-copy strong,.live-strip .status-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .live-strip .details{height:30px;padding:0 10px;border:1px solid var(--rule-dark);background:transparent;color:var(--ink);font-size:11px;font-weight:700}
+    .ledger{position:absolute;z-index:20;top:58px;right:12px;display:none;width:min(680px,90vw);max-height:260px;overflow:auto;background:var(--sheet);border:1px solid var(--ink);box-shadow:0 18px 34px rgba(21,23,24,.16)}
+    .ledger.open{display:block}
+    .ledger-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--ink);font-size:12px}
+    .ledger ol{margin:0;padding:6px 14px 12px;list-style:none}
+    .ledger li{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid var(--rule);font-size:11px}
+    .ledger li:last-child{border:0}.ledger code{font:500 10px JetBrains Mono,monospace;color:var(--muted)}
+    .rail{display:flex;min-height:0;flex-direction:column;background:var(--rail);border-right:1px solid var(--ink)}
+    .rail-head,.inspector-head{display:flex;height:46px;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--ink)}
+    .rail-head strong,.inspector-head strong{font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+    .rail-head span{display:grid;width:22px;height:22px;place-items:center;border:1px solid var(--rule-dark);border-radius:50%;font:600 10px JetBrains Mono,monospace}
+    .desk-label{padding:13px 14px 7px;color:var(--muted);font:600 10px JetBrains Mono,monospace;text-transform:uppercase}
+    .flow-list{display:flex;flex-direction:column;gap:6px;padding:0 10px}
+    .flow{position:relative;width:100%;padding:12px 12px 11px;border:1px solid transparent;background:transparent;color:var(--ink);text-align:left}
+    .flow.selected{background:var(--sheet);border-color:var(--ink);box-shadow:0 4px 0 rgba(21,23,24,.08)}
+    .flow.selected::before{position:absolute;top:-1px;bottom:-1px;left:-1px;width:4px;background:var(--red);content:""}
+    .flow b,.flow small{display:block}.flow b{font-size:12px}.flow small{margin-top:5px;color:var(--muted);font:500 10px JetBrains Mono,monospace}
+    .flow-meta{display:flex;margin-top:10px;align-items:center;justify-content:space-between;color:var(--muted);font-size:10px}
+    .mini-state{display:inline-flex;align-items:center;gap:5px;color:var(--green)}
+    .mini-state::before{width:6px;height:6px;border-radius:50%;background:currentColor;content:""}
+    .recent{margin:16px 10px 0;padding-top:12px;border-top:1px solid var(--rule-dark)}
+    .recent strong{font-size:10px;text-transform:uppercase}
+    .run-row{display:grid;grid-template-columns:50px 1fr;gap:8px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:10px}
+    .run-row span{color:var(--green);font-weight:700}.run-row small{color:var(--muted);font:500 9px JetBrains Mono,monospace}
+    .rail-new{margin:auto 10px 10px;height:40px;border:1px dashed var(--rule-dark);background:transparent;font-size:11px;font-weight:700}
+    .stage{display:grid;min-width:0;min-height:0;grid-template-rows:54px minmax(0,1fr) 122px;background:var(--paper)}
+    .stage-bar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--ink);background:var(--sheet)}
+    .tabs{display:flex;height:100%;align-items:stretch}
+    .tabs button{position:relative;padding:0 14px;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:700}
+    .tabs button.active{color:var(--ink)}
+    .tabs button.active::after{position:absolute;right:12px;bottom:-1px;left:12px;height:3px;background:var(--red);content:""}
+    .stage-actions{display:flex;gap:7px}
+    .stage-actions button{height:32px;padding:0 12px;border:1px solid var(--ink);background:transparent;font-size:11px;font-weight:700}
+    .stage-actions .run{border-color:var(--blue);background:var(--blue);color:#fff}
+    .canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background-color:var(--paper);background-image:linear-gradient(var(--rule) 1px,transparent 1px);background-size:100% 34px}
+    .canvas-title{position:absolute;top:22px;left:24px}
+    .canvas-title h1{margin:0;font-size:25px;letter-spacing:-.02em}
+    .canvas-title p{margin:6px 0 0;color:var(--muted);font-size:12px}
+    .slug{position:absolute;top:24px;right:24px;display:flex;align-items:center;gap:8px;font:600 10px JetBrains Mono,monospace}
+    .slug::before{width:7px;height:7px;border-radius:50%;background:var(--blue);content:""}
+    .route{position:absolute;top:47%;right:34px;left:34px;display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));align-items:center;gap:28px}
+    .route::before{position:absolute;z-index:0;top:48px;right:6%;left:6%;border-top:2px solid var(--ink);content:""}
+    .route::after{position:absolute;z-index:0;top:44px;right:5.5%;width:8px;height:8px;border-top:2px solid var(--ink);border-right:2px solid var(--ink);content:"";transform:rotate(45deg)}
+    .node{position:relative;z-index:1;min-width:0;height:98px;padding:10px 10px 8px;background:var(--sheet);border:1px solid var(--ink);box-shadow:0 7px 0 rgba(21,23,24,.06)}
+    .node.active{outline:3px solid var(--blue);outline-offset:3px}
+    .node-top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule);padding-bottom:7px}
+    .node-id{font:600 9px JetBrains Mono,monospace;color:var(--muted)}
+    .node-kind{padding:2px 4px;background:var(--ink);color:white;font:600 8px JetBrains Mono,monospace}
+    .node h3{margin:10px 0 3px;font-size:12px}.node p{margin:0;color:var(--muted);font:500 9px JetBrains Mono,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .node-stamp{position:absolute;right:8px;bottom:8px;color:var(--red);font:700 9px JetBrains Mono,monospace;transform:rotate(-4deg)}
+    .node.active .node-stamp{color:var(--blue)}
+    .canvas-note{position:absolute;right:24px;bottom:22px;width:190px;padding:10px 12px;background:var(--sheet);border:1px solid var(--rule-dark);font-size:10px;line-height:1.5;transform:rotate(-1deg)}
+    .canvas-note b{display:block;margin-bottom:4px;color:var(--red)}
+    .ticker{display:grid;grid-template-columns:108px 1fr 126px;border-top:1px solid var(--ink);background:var(--sheet)}
+    .ticker-label{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-right:1px solid var(--ink)}
+    .ticker-label strong{font-size:11px;text-transform:uppercase}.ticker-label span{margin-top:5px;color:var(--blue);font:600 10px JetBrains Mono,monospace}
+    .ticker-lines{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:9px;padding:0 16px}
+    .ticker-line{display:grid;grid-template-columns:24px 90px 1fr auto;gap:8px;align-items:center;font-size:11px}
+    .ticker-line code{color:var(--muted);font:500 9px JetBrains Mono,monospace}.ticker-line b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ticker-line i{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+    .ticker-count{display:flex;align-items:center;justify-content:center;border-left:1px solid var(--rule);font:600 10px JetBrains Mono,monospace}
+    .inspector{min-width:0;min-height:0;overflow:auto;background:var(--sheet);border-left:1px solid var(--ink)}
+    .proof{margin:14px;padding:14px;border:1px solid var(--rule-dark)}
+    .proof-id{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--ink)}
+    .proof-id div{display:flex;flex-direction:column;gap:3px}.proof-id strong{font-size:14px}.proof-id code{font:500 9px JetBrains Mono,monospace;color:var(--muted)}
+    .proof-badge{padding:4px 7px;background:var(--blue-soft);color:var(--blue);font:700 9px JetBrains Mono,monospace}
+    .field{display:flex;flex-direction:column;gap:5px;margin-top:14px}
+    .field label{color:var(--muted);font:600 10px JetBrains Mono,monospace;text-transform:uppercase}
+    .field input,.field textarea{width:100%;border:0;border-bottom:1px solid var(--rule-dark);background:transparent;color:var(--ink);font-size:12px}
+    .field input{height:34px}.field textarea{height:66px;padding:8px 0;resize:none;line-height:1.5}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .selector-table{width:100%;margin-top:8px;border-collapse:collapse;font-size:10px}
+    .selector-table th,.selector-table td{padding:7px 4px;border-bottom:1px solid var(--rule);text-align:left}
+    .selector-table th{color:var(--muted);font:600 9px JetBrains Mono,monospace}
+    .selector-table code{font:500 9px JetBrains Mono,monospace}
+    .proof-note{margin:16px 14px;padding:11px 12px;background:var(--blue-soft);color:#1f3977;font-size:10px;line-height:1.5}
+    .danger{width:calc(100% - 28px);height:34px;margin:0 14px 14px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-weight:700}
+    @media(max-width:1200px){.app{grid-template-columns:210px minmax(560px,1fr) 280px}.mast{grid-template-columns:210px 1fr auto}.status{grid-template-columns:210px 150px 120px 1fr}.route{gap:16px}.node{padding:9px 8px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="mast">
+      <div class="brand"><span class="brand-mark">S</span><strong>SIFTLANE</strong></div>
+      <div class="edition"><b>WIRE DESK</b><span>本地工作区</span><span>2026.07.31 / 12:47</span></div>
+      <div class="mast-actions">
+        <button class="icon-button" aria-label="刷新状态" title="刷新状态"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg></button>
+        <button class="primary"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新建流程</button>
+      </div>
+    </header>
+    <section class="status" aria-label="运行状态">
+      <div class="engine"><span class="status-dot"></span><div class="status-copy"><strong>执行引擎在线</strong><small>PY 0.1.0 / 2 WORKERS / 6 NODES</small></div></div>
+      <div class="stat"><small>已保存流程</small><b>03</b></div>
+      <div class="stat"><small>今日运行</small><b>12</b></div>
+      <div class="live-strip">
+        <svg class="pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+        <div class="status-copy"><strong>公共信息巡检 · 正在提取结构化条目</strong><small>EXTRACT / ARTICLE / 已识别 1 项</small></div>
+        <button class="details" aria-expanded="false" aria-controls="ledger">完整详情</button>
+        <section class="ledger" id="ledger" aria-label="完整运行事件">
+          <div class="ledger-head"><strong>RUN 46DF03B0 / 事件账本</strong><code>LIVE</code></div>
+          <ol><li><b>01</b><span>任务进入持久队列</span><code>12:46:02.114</code></li><li><b>02</b><span>开始执行公共信息巡检</span><code>12:46:02.219</code></li><li><b>03</b><span>获取页面完成 · 200 OK</span><code>12:46:03.081</code></li><li><b>04</b><span>正在提取 article 结构</span><code>12:46:03.226</code></li></ol>
+        </section>
+      </div>
+    </section>
+    <aside class="rail">
+      <div class="rail-head"><strong>Assignment Desk</strong><span>3</span></div>
+      <div class="desk-label">已保存流程</div>
+      <div class="flow-list">
+        <button class="flow selected"><b>公共信息巡检</b><small>FLOW / 7C12A8</small><div class="flow-meta"><span>4 个处理站</span><span class="mini-state">启用</span></div></button>
+        <button class="flow"><b>价格页面观察</b><small>FLOW / A892C1</small><div class="flow-meta"><span>5 个处理站</span><span>已暂停</span></div></button>
+        <button class="flow"><b>公告 JSON 采集</b><small>FLOW / 4B17EF</small><div class="flow-meta"><span>4 个处理站</span><span class="mini-state">启用</span></div></button>
+      </div>
+      <div class="recent"><strong>Recent Dispatches</strong><div class="run-row"><span>完成</span><div>公共信息巡检<br><small>12:38 · 18 项</small></div></div><div class="run-row"><span>完成</span><div>公告 JSON 采集<br><small>11:52 · 42 项</small></div></div></div>
+      <button class="rail-new">+ 新建空白流程</button>
+    </aside>
+    <section class="stage">
+      <div class="stage-bar"><div class="tabs"><button class="active">编排台</button><button>运行记录</button><button>结果</button></div><div class="stage-actions"><button>保存版本</button><button class="run"><svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>运行</button></div></div>
+      <div class="canvas">
+        <div class="canvas-title"><h1>公共信息巡检</h1><p>从页面入口到统一输出，每个处理站都保留证据与状态。</p></div>
+        <div class="slug">RUN 46DF03B0 / LIVE</div>
+        <div class="route">
+          <article class="node"><div class="node-top"><span class="node-id">STATION 01</span><span class="node-kind">START</span></div><h3>输入地址</h3><p>1 个种子 URL</p><span class="node-stamp">DONE</span></article>
+          <article class="node"><div class="node-top"><span class="node-id">STATION 02</span><span class="node-kind">HTTP</span></div><h3>获取页面</h3><p>GET / respect robots</p><span class="node-stamp">200 OK</span></article>
+          <article class="node active"><div class="node-top"><span class="node-id">STATION 03</span><span class="node-kind">HTML</span></div><h3>提取条目</h3><p>article → 3 fields</p><span class="node-stamp">LIVE</span></article>
+          <article class="node"><div class="node-top"><span class="node-id">STATION 04</span><span class="node-kind">EMIT</span></div><h3>输出结果</h3><p>normalized items</p><span class="node-stamp">WAIT</span></article>
+        </div>
+        <div class="canvas-note"><b>DESK NOTE</b>网络请求默认受 SSRF、robots、限速与响应大小约束。</div>
+      </div>
+      <div class="ticker"><div class="ticker-label"><strong>Live Wire</strong><span>2 LINES</span></div><div class="ticker-lines"><div class="ticker-line"><i></i><code>12:46:03</code><b>已保存页面响应，开始匹配 article 选择器</b><span>刚刚</span></div><div class="ticker-line"><i></i><code>12:46:04</code><b>正在读取 title、url、content 字段</b><span>进行中</span></div></div><div class="ticker-count">展开 4 条事件</div></div>
+    </section>
+    <aside class="inspector">
+      <div class="inspector-head"><strong>Copy Desk</strong><span class="proof-badge">STATION 03</span></div>
+      <section class="proof"><div class="proof-id"><div><strong>提取条目</strong><code>HTML_EXTRACT / EXTRACT</code></div><span class="proof-badge">运行中</span></div>
+        <div class="field"><label>节点名称</label><input value="提取条目" aria-label="节点名称"></div>
+        <div class="field"><label>重复项选择器</label><input value="article" aria-label="重复项选择器"></div>
+        <div class="field-grid"><div class="field"><label>最大结果</label><input value="100" aria-label="最大结果"></div><div class="field"><label>超时</label><input value="300s" aria-label="超时"></div></div>
+        <div class="field"><label>字段映射</label><table class="selector-table"><thead><tr><th>字段</th><th>选择器</th></tr></thead><tbody><tr><td>title</td><td><code>h2</code></td></tr><tr><td>url</td><td><code>a@href</code></td></tr><tr><td>content</td><td><code>p</code></td></tr></tbody></table></div>
+        <div class="field"><label>参数 JSON</label><textarea aria-label="参数 JSON">{
+  "item_selector": "article",
+  "fields": 3
+}</textarea></div>
+      </section>
+      <p class="proof-note">配置为声明式 JSON。转换节点只支持安全模板，不执行任意 Python 或 JavaScript。</p>
+      <button class="danger">删除处理站</button>
+    </aside>
+  </main>
+  <script>
+    const details=document.querySelector('.details');const ledger=document.querySelector('.ledger');details.addEventListener('click',()=>{const open=ledger.classList.toggle('open');details.setAttribute('aria-expanded',String(open));details.textContent=open?'收起详情':'完整详情'});
+  </script>
+</body>
+</html>

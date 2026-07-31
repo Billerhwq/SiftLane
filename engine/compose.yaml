@@ -1,0 +1,14 @@
+services:
+  engine:
+    build: .
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      SIFTLANE_ENGINE_API_TOKEN: ${SIFTLANE_ENGINE_API_TOKEN:-}
+      SIFTLANE_ENGINE_WORKER_COUNT: ${SIFTLANE_ENGINE_WORKER_COUNT:-2}
+    volumes:
+      - siftlane-data:/data
+    restart: unless-stopped
+
+volumes:
+  siftlane-data:

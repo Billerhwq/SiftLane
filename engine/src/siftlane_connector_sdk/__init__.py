@@ -1,0 +1,41 @@
+"""Public connector contract for independently packaged Siftlane connectors."""
+
+from .contract import (
+    AuthScheme,
+    ConnectorCapability,
+    ConnectorContext,
+    ConnectorEvent,
+    ConnectorHttpRequest,
+    ConnectorHttpResponse,
+    ConnectorItem,
+    ConnectorManifest,
+    ConnectorOperationRequest,
+    ConnectorOperationResult,
+    ConnectorRuntime,
+    EventSink,
+    HttpTransport,
+    RateLimitPolicy,
+    RuntimeRequirements,
+    SecretProvider,
+    SecretRef,
+)
+
+__all__ = [
+    "AuthScheme",
+    "ConnectorCapability",
+    "ConnectorContext",
+    "ConnectorEvent",
+    "ConnectorHttpRequest",
+    "ConnectorHttpResponse",
+    "ConnectorItem",
+    "ConnectorManifest",
+    "ConnectorOperationRequest",
+    "ConnectorOperationResult",
+    "ConnectorRuntime",
+    "EventSink",
+    "HttpTransport",
+    "RateLimitPolicy",
+    "RuntimeRequirements",
+    "SecretProvider",
+    "SecretRef",
+]
