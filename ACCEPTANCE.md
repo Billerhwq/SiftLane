@@ -42,8 +42,8 @@ A feature is not accepted merely because implementation or a test file exists.
 | --- | --- | --- | --- |
 | RH-01 | One root command runs engine tests, the production Web build, all P1/P2 browser tests, and release metadata checks. | `scripts/verify.ps1` | Passed |
 | RH-02 | `VERSION`, Python metadata/runtime, Web package/lockfile, and release tag rules agree on `0.2.0`. | `scripts/check-release.ps1`; API version test | Passed |
-| RH-03 | Pull requests, `main`, manual runs, and release callers execute the Windows acceptance gate. | `.github/workflows/ci.yml` | Implemented; remote run pending |
-| RH-04 | A `v*` tag must pass the reusable acceptance workflow before any GitHub Release is created. | `.github/workflows/release.yml` | Implemented; tag run pending |
+| RH-03 | Pull requests, `main`, manual runs, and release callers execute the Windows acceptance gate. | `.github/workflows/ci.yml` | Passed remotely; branch rule unconfirmed |
+| RH-04 | A `v*` tag must pass the reusable acceptance workflow before any GitHub Release is created. | `.github/workflows/release.yml` | Passed |
 | RH-05 | Candidate packaging produces wheel, sdist, Web zip, manifest, and SHA-256 sums and smoke-tests both installable surfaces. | `scripts/package-release.ps1` | Passed |
 | RH-06 | Release preparation, branch protection, stop conditions, post-release checks, and rollback are documented. | `documentation/release.md`; P2 release PRD | Passed |
 | RH-07 | Formal release state is not claimed before the reviewed commit is pushed and the matching tag workflow passes. | Promotion decision; release runbook | Passed |
@@ -61,6 +61,12 @@ A feature is not accepted merely because implementation or a test file exists.
 - Release candidate: wheel, sdist, Web zip, `manifest.json`, and `SHA256SUMS.txt`
   were produced; wheel installation, Web extraction, and an independent checksum
   pass succeeded.
+- Remote `main` gate: Actions run `30666925268` passed for commit `6e4c92a`.
+- Tag release gate: Actions run `30667147413` passed for `v0.2.0` after rerunning
+  acceptance, packaging, artifact preservation, and GitHub Release creation.
+- Published release: `https://github.com/Billerhwq/SiftLane/releases/tag/v0.2.0`;
+  all five downloaded assets matched the remote SHA-256 list and the manifest was
+  clean at commit `6e4c92a`.
 
 ## Promotion Decision
 
@@ -69,9 +75,10 @@ Current decision: **P2 completed**.
 All mandatory P1 and P2 rows passed from the same repository revision through the
 root verification command. New P2 work must preserve this gate.
 
-Release state: **`v0.2.0` candidate ready; not formally released**.
+Release state: **`v0.2.0` GitHub Release published**.
 
-Formal release requires every RH row to pass, the complete baseline to be reviewed
-and pushed, `P2 acceptance / acceptance` to be required on `main`, and the matching
-tag workflow to create the GitHub Release. A local artifact build is evidence for a
-candidate, not evidence that an external release exists.
+The reviewed baseline was pushed, both remote acceptance runs passed, the matching
+tag workflow created the Release, and downloaded assets passed post-release checks.
+The remaining governance check is administrator confirmation that
+`P2 acceptance / acceptance` is required on `main`; this run did not modify repository
+branch-protection settings.

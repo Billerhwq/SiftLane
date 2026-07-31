@@ -50,10 +50,11 @@ restarts it against the same database, and verifies exact, duplicate-free output
 
 ## Phase status
 
-P2 is completed. The mandatory P1/P2 gate passes the engine suite, production web
-build, and isolated browser acceptance tests in one command. See `ACCEPTANCE.md` for
-the criteria and evidence map. Version `0.2.0` is the P2 release candidate; it is not
-a formal release until the protected tag workflow succeeds.
+P2 is completed. The mandatory P1/P2 gate passes the engine suite, production Web
+build, and isolated browser acceptance tests in one command. Version `v0.2.0` was
+published by the successful protected tag workflow with all five release assets.
+See `ACCEPTANCE.md` for the criteria, evidence, and remaining repository-governance
+check.
 
 ## Start
 

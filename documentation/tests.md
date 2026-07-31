@@ -21,8 +21,10 @@ release metadata check. `scripts/release.ps1` then built five candidate files an
 passed the wheel, Web archive, and independent SHA-256 checks.
 
 The `P2 acceptance` GitHub Actions workflow now runs the same gate for pull requests,
-`main`, manual dispatch, and the release workflow. Repository branch protection must
-still require `P2 acceptance / acceptance` before CI can enforce merges.
+`main`, manual dispatch, and the release workflow. It passed on `main` and again from
+the `v0.2.0` release workflow. Repository branch protection must still require
+`P2 acceptance / acceptance` before CI can enforce merges; that administrator setting
+was not changed or confirmed by this release run.
 
 ## Proposed Tests
 

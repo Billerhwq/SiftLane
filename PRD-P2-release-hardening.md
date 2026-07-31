@@ -161,8 +161,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | RH-01 | 所有 P1/P2 功能门禁在同一次根验证中通过 | `scripts/verify.ps1` | 已通过 |
 | RH-02 | 所有产品版本为 `0.2.0`，标签规则可阻止不匹配版本 | `scripts/check-release.ps1` | 已通过 |
-| RH-03 | PR、main、手动和工作流调用均有 Windows CI | `.github/workflows/ci.yml` | 已实现，待首次远端运行 |
-| RH-04 | 标签发布必须依赖完整 CI | `.github/workflows/release.yml` | 已实现，待标签触发 |
+| RH-03 | PR、main、手动和工作流调用均有 Windows CI | `.github/workflows/ci.yml` | 远端已通过，分支规则待管理员确认 |
+| RH-04 | 标签发布必须依赖完整 CI | `.github/workflows/release.yml` | 已通过 |
 | RH-05 | 候选命令生成并冒烟检查全部制品和校验文件 | `scripts/release.ps1` | 已通过 |
 | RH-06 | 发布说明、操作步骤、停止条件和回滚步骤完整 | `documentation/release.md` | 已通过 |
 | RH-07 | 本地验证结束后测试端口全部释放 | Playwright 服务编排器与端口检查 | 已通过 |
@@ -170,3 +170,5 @@ flowchart LR
 ### 8.4 正式发布判定
 
 只有 RH-01 至 RH-07 全部通过、变更已提交并推送、`main` 必需检查生效且 `v0.2.0` 标签工作流成功后，P2 才可称为“正式发布”。在此之前状态为“P2 功能完成，`v0.2.0` 发布候选就绪”。
+
+当前结果：`v0.2.0` 标签工作流成功，GitHub Release 与五个资产已经发布并通过下载后校验。由于本次操作没有修改或确认 GitHub 分支保护，严格治理判定仍待仓库管理员确认 `P2 acceptance / acceptance` 是 `main` 的必需检查。
