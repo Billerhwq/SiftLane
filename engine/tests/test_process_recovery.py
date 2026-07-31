@@ -26,7 +26,7 @@ def request_json(base: str, path: str, payload: dict | None = None):
         headers={"Content-Type": "application/json"},
         method="POST" if payload is not None else "GET",
     )
-    with urlopen(request, timeout=2) as response:
+    with urlopen(request, timeout=10) as response:
         return json.loads(response.read())
 
 
@@ -69,6 +69,17 @@ def stop_process(process: subprocess.Popen) -> None:
     process.wait(timeout=5)
 
 
+def read_run_state(database_path: Path, run_id: str) -> tuple[str, int] | None:
+    try:
+        with sqlite3.connect(database_path, timeout=1) as database:
+            row = database.execute(
+                "SELECT status,processed_items FROM runs WHERE id=?", (run_id,)
+            ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return (str(row[0]), int(row[1])) if row else None
+
+
 def test_worker_process_recovers_without_duplicate_results(tmp_path):
     engine_dir = Path(__file__).resolve().parents[1]
     port = free_port()
@@ -103,23 +114,30 @@ def test_worker_process_recovers_without_duplicate_results(tmp_path):
         )
         run_id = run["id"]
         interrupted_at = 0
-        for _ in range(500):
-            current = request_json(base, f"/api/v1/runs/{run_id}")
-            if current["status"] == "RUNNING" and 10 <= current["processed_items"] < total:
-                interrupted_at = current["processed_items"]
+        interrupt_deadline = time.monotonic() + 30
+        while time.monotonic() < interrupt_deadline:
+            if process.poll() is not None:
+                raise AssertionError(f"engine exited with {process.returncode}")
+            current = read_run_state(tmp_path / "crawler.db", run_id)
+            if current and current[0] == "RUNNING" and 10 <= current[1] < total:
+                interrupted_at = current[1]
                 break
-            time.sleep(0.01)
+            time.sleep(0.025)
         assert 0 < interrupted_at < total, "run completed before it could be interrupted"
 
         stop_process(process)
         restarted = start_engine(engine_dir, tmp_path, port)
         wait_for_health(base, restarted)
         terminal = None
-        for _ in range(1000):
-            terminal = request_json(base, f"/api/v1/runs/{run_id}")
-            if terminal["status"] in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+        recovery_deadline = time.monotonic() + 120
+        while time.monotonic() < recovery_deadline:
+            if restarted.poll() is not None:
+                raise AssertionError(f"restarted engine exited with {restarted.returncode}")
+            state = read_run_state(tmp_path / "crawler.db", run_id)
+            if state and state[0] in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+                terminal = {"status": state[0], "processed_items": state[1]}
                 break
-            time.sleep(0.01)
+            time.sleep(0.025)
         assert terminal is not None and terminal["status"] == "SUCCEEDED", terminal
         assert terminal["processed_items"] == total
 

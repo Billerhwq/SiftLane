@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from siftlane_engine.api import create_app
 from siftlane_engine.config import Settings
+from siftlane_engine import __version__
 
 
 class FixtureHandler(BaseHTTPRequestHandler):
@@ -227,6 +228,13 @@ def test_api_token_protects_engine_routes(tmp_path):
             "/api/v1/flows", headers={"Authorization": "Bearer test-token"}
         )
         assert authorized.status_code == 200
+
+
+def test_health_and_openapi_expose_runtime_version(tmp_path):
+    settings = Settings(data_dir=tmp_path, worker_count=1)
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/health").json()["version"] == __version__
+        assert client.get("/openapi.json").json()["info"]["version"] == __version__
 
 
 def test_capabilities_expose_connector_contract(tmp_path):

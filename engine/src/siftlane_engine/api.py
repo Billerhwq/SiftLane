@@ -14,6 +14,7 @@ from siftlane_connector_sdk import (
     ConnectorOperationResult,
 )
 
+from . import __version__
 from .config import Settings
 from .connectors import CONNECTOR_ENTRYPOINT_GROUP, ConnectorRegistry
 from .engine import node_capabilities
@@ -47,7 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Siftlane Engine",
-        version="0.1.0",
+        version=__version__,
         docs_url="/docs",
         redoc_url=None,
         lifespan=lifespan,
@@ -75,7 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def health() -> dict[str, object]:
         return {
             "status": "UP",
-            "version": "0.1.0",
+            "version": __version__,
             "workers": configured.worker_count,
             "queuedRuns": service.queue_size,
             "database": str(configured.database_path),

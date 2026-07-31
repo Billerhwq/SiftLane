@@ -77,7 +77,7 @@ Use the root `DESIGN.md` frontmatter as the normative token source. The shipped 
 
 ## Product Boundary
 
-- The visible node vocabulary is `start`, `http_request`, `html_extract`, `json_extract`, `transform`, and `emit`.
+- The visible node vocabulary is `start`, `http_request`, `html_extract`, `json_extract`, `condition`, `loop`, `pagination`, `transform`, and `emit`.
 - The UI may show the shipped connector surface and real engine evidence, but it must not present browser automation, authenticated platform adapters, or arbitrary Python/JavaScript execution as available.
 - Do not invent production metrics, certified connectors, customer proof, or platform capability states.
 - Do not import or mimic SubtleSight components, tokens, navigation, wordmark, dark shell, AI-assistant styling, or document-editor patterns.
@@ -101,4 +101,4 @@ Use the root `DESIGN.md` frontmatter as the normative token source. The shipped 
 - **FIRST VIEWPORT: RESOLVED.** Desktop shows flow context, engine health, full-scale graph, inspector, and live evidence together. Mobile preserves brand, engine state, graph, run controls, and live activity while moving side context behind explicit controls.
 - **FORM: RESOLVED.** The shipped implementation matches the user-locked Cloud Blue Console direction from prototype D without drifting toward the generated dark baseline.
 
-Evidence: `outputs/p1-desktop.png`, `outputs/p1-desktop-results.png`, and `outputs/p1-mobile.png`.
+Evidence: `outputs/p1-desktop.png`, `outputs/p1-desktop-results.png`, `outputs/p1-mobile.png`, `outputs/p2-branch-retry.png`, and `outputs/p2-scheduler.png`.

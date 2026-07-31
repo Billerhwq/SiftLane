@@ -11,6 +11,8 @@ coverage/
 *.tsbuildinfo
 test-results/
 playwright-report/
+apps/web/.playwright-browsers/
+apps/web/.e2e-data/
 vite.config.js
 vite.config.d.ts
 
@@ -19,6 +21,12 @@ data/
 *.db-shm
 *.db-wal
 .env
+release-artifacts/
 
-outputs/
+outputs/*
+!outputs/p1-desktop.png
+!outputs/p1-desktop-results.png
+!outputs/p1-mobile.png
+!outputs/p2-branch-retry.png
+!outputs/p2-scheduler.png
 .impeccable/sketches/

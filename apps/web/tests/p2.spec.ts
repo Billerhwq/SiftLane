@@ -1,7 +1,16 @@
 import { expect, test } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const engine = "http://127.0.0.1:8092";
-const output = "D:/Siftlane/outputs";
+import { openControlRoom } from "./helpers";
+
+const engine = "http://127.0.0.1:8090";
+const output = fileURLToPath(new URL("../../../outputs/", import.meta.url));
+mkdirSync(output, { recursive: true });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await page.close({ runBeforeUnload: false });
+});
 
 test("P2 branch, retry inspector and scheduler close the UI loop", async ({ page, request }) => {
   const suffix = Date.now().toString().slice(-6);
@@ -26,7 +35,7 @@ test("P2 branch, retry inspector and scheduler close the UI loop", async ({ page
   expect(flowResponse.status()).toBe(201);
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
+  await openControlRoom(page);
   await page.getByText(flowName, { exact: true }).first().click();
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
   const branch = page.locator(".react-flow__node").filter({ hasText: "Published?" });

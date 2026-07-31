@@ -11,7 +11,7 @@ import type {
   ScheduleRecord,
 } from "./types";
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8092").replace(/\/$/, "");
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8090").replace(/\/$/, "");
 const API_TOKEN = import.meta.env.VITE_API_TOKEN ?? "";
 
 function headers(extra?: HeadersInit): HeadersInit {

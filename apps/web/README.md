@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-The default engine URL is `http://127.0.0.1:8092`. Override it when needed:
+The default engine URL is `http://127.0.0.1:8090`. Override it when needed:
 
 ```powershell
 $env:VITE_API_BASE_URL="http://127.0.0.1:8090"
@@ -22,9 +22,13 @@ npm run dev
 
 ```powershell
 npm run build
-npx playwright test
+npm run test:e2e
 ```
 
-The Playwright test creates a flow through the UI, updates node configuration,
-saves it, runs it against a local fixture, follows SSE events, and verifies two
-persisted result rows. It also checks the mobile rail and inspector drawers.
+Playwright starts an isolated engine on port 8090, a fixture server on port 8877,
+and Vite on port 5173. The tests create flows through the UI, run them, verify
+durable events and results, exercise P2 branching/retry/scheduling, and check the
+mobile rail and inspector drawers. The engine virtual environment must already
+exist at `engine/.venv`; provision the repository-local browser once with
+`npm run install:browsers`. Set `SIFTLANE_E2E_BROWSER_CHANNEL=chrome` to use an
+installed Chrome when the Playwright browser CDN is unavailable.

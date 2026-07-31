@@ -1,10 +1,19 @@
 import { expect, test } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const output = "D:/Siftlane/outputs";
+import { openControlRoom } from "./helpers";
+
+const output = fileURLToPath(new URL("../../../outputs/", import.meta.url));
+mkdirSync(output, { recursive: true });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await page.close({ runBeforeUnload: false });
+});
 
 test("P1 flow closes the browser-to-engine loop", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
+  await openControlRoom(page);
   await expect(page.getByText("执行引擎在线")).toBeVisible();
 
   await page.getByRole("button", { name: "连接器" }).click();
@@ -42,7 +51,7 @@ test("P1 flow closes the browser-to-engine loop", async ({ page }) => {
   await page.getByRole("button", { name: /条事件/ }).click();
   await expect(page.getByText("完整运行记录")).toBeVisible();
   expect(await page.locator(".event-ledger li").count()).toBeGreaterThan(8);
-  await page.locator(".toast button").click().catch(() => undefined);
+  await page.locator(".toast button").click({ timeout: 1_000 }).catch(() => undefined);
   await page.screenshot({ path: `${output}/p1-desktop-results.png`, fullPage: true });
   await page.getByRole("button", { name: /条事件/ }).click();
   await page.getByRole("button", { name: "编排", exact: true }).click();
@@ -52,7 +61,7 @@ test("P1 flow closes the browser-to-engine loop", async ({ page }) => {
 
 test("mobile control room keeps drawers coherent", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openControlRoom(page);
   await expect(page.getByText("执行引擎在线")).toBeVisible();
   await page.getByRole("button", { name: "打开流程列表" }).click();
   await expect(page.locator(".flow-rail.mobile-open")).toBeVisible();
