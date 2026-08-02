@@ -1,47 +1,40 @@
 # Test Coverage Map
 
-## Existing Coverage
+## Automated Coverage
 
-| Use case | Rule and expected behavior | Evidence | Status |
+| Phase | Use case | Rule and expected behavior | Evidence |
 | --- | --- | --- | --- |
-| Graph validation | Reject cycles, disconnected nodes, invalid config, and invalid branch ports | `test_models.py`, `test_p2_engine.py` | Passed |
-| Flow/run API | Persist revisions and snapshots; reject bad auth; resume SSE | `test_api.py`, `test_storage.py` | Passed |
-| Controlled HTTP | Reject private targets by default | `test_security.py` | Passed |
-| Recovery/cancel | Requeue/recover/cancel durably without duplicate items | `test_service.py`, `test_process_recovery.py` | Passed |
-| P1 browser loop | Create/configure/run, observe events/results, and validate mobile drawers | `apps/web/tests/p1.spec.ts` | Passed |
-| P2 execution | Branch, bound loop/pagination, retry, checkpoint restore, scheduler lease/idempotency | `test_p2_engine.py` | Passed |
-| P2 browser loop | Branch handles, retry inspector, schedule create/pause/trigger | `apps/web/tests/p2.spec.ts` | Passed |
-| Connector contract | Validate manifests, duplicates, discovery schemas | `test_connectors.py`, `test_api.py` | Passed |
-| Release metadata | Keep Python runtime/package, Web package/lockfile, evidence, and tag format consistent | `test_health_and_openapi_expose_runtime_version`, `scripts/check-release.ps1` | Implemented |
-| Release artifacts | Build and smoke-test wheel and Web zip; generate manifest and checksums | `scripts/package-release.ps1` | Implemented |
+| P0/P1 | Graph, API, storage, controlled HTTP, recovery | Reject invalid graphs/private targets; preserve snapshots, SSE, checkpoints and item identity | `engine/tests/test_models.py`, `test_api.py`, `test_storage.py`, `test_security.py`, `test_service.py`, `test_process_recovery.py` |
+| P1 | Browser core loop and responsive drawers | Create/configure/run, observe events/results, no page overflow | `apps/web/tests/p1.spec.ts` and P1 screenshots |
+| P2 | Branch, loop, retry, recovery and scheduler | Bounded execution, checksum restore, lease and idempotent schedule fire | `engine/tests/test_p2_engine.py`, `apps/web/tests/p2.spec.ts` |
+| P2 | Release metadata and artifacts | Version parity, required evidence, wheel/sdist/Web zip, manifest, hashes and clean install smoke | `scripts/check-release.ps1`, `package-release.ps1` |
+| P3 | Team authentication and sessions | Bootstrap, login, token hashing/rotation/revocation, throttling and last-admin guard | `engine/tests/test_p3_security.py` |
+| P3 | Authorization and audit | Allow/deny every role across flows, runs, results, schedules, audit and security operations | `engine/tests/test_p3_security.py`, `apps/web/tests/p3.spec.ts` |
+| P3 | Connector discovery isolation | Child-process timeout/output cap/reduced environment; failure cannot stop startup | `engine/tests/test_p3_security.py` |
+| P4 | Managed connectors | Hash/contract/compatibility checks, lifecycle, child execution, rollback and secret stdin | `engine/tests/test_p4_integrations.py` |
+| P4 | Scoped secrets and delivery | Ciphertext-only storage/API, connector-result echo rejection, target ownership, Bearer/HMAC, idempotency, bounded retry, cancel, dead letter and replay | `engine/tests/test_p4_integrations.py` |
+| P4 | Integration console | Configure connector, secret, target and delivery; inspect failure/replay without plaintext | `apps/web/tests/p4.spec.ts` and `outputs/p4-integrations-delivery.png` |
+| P5 | Schema, probes, metrics and backup | Schema 5 readiness, operational metrics, online backup, manifest/hash/integrity and atomic restore | `engine/tests/test_p5_operations.py` |
+| P5 | Capacity and soak | 120 runs/2400 items at concurrency 8, database threshold, sustained cycles and heap limits | `scripts/p5-qualification.ps1`, `outputs/p5-*-report.json` |
+| P5 | Security | Python/npm production dependency audit, repository credential scan and release artifact/path/hash scan | `scripts/security-check.ps1`, `engine/scripts/security_audit.py` |
+| P5 | Accessibility and operations UI | Axe serious/critical checks, keyboard focus, Escape, 200% zoom, probes/metrics/schema browser loop | `apps/web/tests/p5.spec.ts`, `outputs/p5-production-readiness.png` |
+| P5 | Linux deployment | Build hardened engine/Web images, Compose readiness, loopback ports and persisted data boundary | `.github/workflows/ci.yml` job `linux deployment` |
 
-The required local gate is `scripts/verify.ps1`. Its release-hardening acceptance
-run passed 26 engine tests, the production Web build, 3 Playwright tests, and the
-release metadata check. `scripts/release.ps1` then built five candidate files and
-passed the wheel, Web archive, and independent SHA-256 checks.
+## Authoritative Gates
 
-The `P2 acceptance` GitHub Actions workflow now runs the same gate for pull requests,
-`main`, manual dispatch, and the release workflow. It passed on `main` and again from
-the `v0.2.0` release workflow. Repository branch protection must still require
-`P2 acceptance / acceptance` before CI can enforce merges; that administrator setting
-was not changed or confirmed by this release run.
+`scripts/verify.ps1` is the local lifecycle gate. For a `1.x` candidate it runs the full engine suite, production Web build, every P1-P5 Playwright test, 30-second P5 qualification, dependency/credential security checks and release metadata validation. `scripts/release.ps1` adds package construction, clean wheel/Web smoke tests, manifest/SHA-256 generation and release artifact audit.
 
-## Proposed Tests
+The `P2 acceptance` GitHub Actions workflow retains its historical required-check name, executes the same Windows lifecycle gate and separately proves the Linux Compose deployment. A local Windows pass cannot substitute for the Linux job. Repository branch protection must still be confirmed by a repository administrator before P3/P4/P5 can be marked formally released.
 
-| Type | Case | Expected behavior |
+## Manual Acceptance
+
+The release reviewer checks the captured P3/P4/P5 browser evidence, runs the deployment/upgrade/restore instructions from a clean environment, records the candidate commit and workflow URLs, and confirms no serious accessibility or unaccepted high-severity security finding. These reviewer/date records are external release evidence and are never inferred from local test output.
+
+## Residual Gaps
+
+| Priority | Boundary | Exposure and handling |
 | --- | --- | --- |
-| Automated integration | CORS with an unapproved origin | Browser preflight does not grant access |
-| Automated integration | Corrupt checkpoint during startup recovery | Run fails visibly or safely re-executes according to an explicit policy |
-| Automated integration | Scheduler restart after claim but before completion | Lease expiry produces one idempotent run |
-| Automated E2E | API token enabled for browser and engine | Full P1/P2 UI path passes; missing token receives 401 |
-| Guarded live | Public target respecting redirects, robots, and throttling | Policy matches a real HTTP server without private-network override |
-| Manual review | Keyboard-only complete P1/P2 workflow | Focus remains visible and dialogs/drawers trap and restore focus |
-
-## Gaps
-
-| Priority | Unverified rule | Exposure |
-| --- | --- | --- |
-| High | Connector runtime is not isolated from the engine process | A malicious trusted extension can access process authority |
-| Medium | Production bearer-token UI path lacks end-to-end coverage | Deployment-only auth/config errors may escape local testing |
-| Medium | Recovery behavior for deliberately corrupt checkpoint data lacks a service-level acceptance case | Operational recovery may require manual intervention |
-| Low | Accessibility has focused checks but no automated audit | Keyboard or semantic regressions may be missed |
+| High | Connector process isolation is not a kernel or VM sandbox | Install only reviewed wheels; disable/rollback the connector on fault |
+| High | Single-node SQLite has no automatic failover | Operate inside the qualified capacity, verify backups and restore within the documented RTO |
+| Medium | End-to-end exactly-once Webhook behavior depends on receiver idempotency | Receiver must honor `Idempotency-Key`; history and replay stay visible |
+| Medium | Linux container behavior is unavailable on a Windows host without Docker | Require the `linux deployment` CI job for formal release |

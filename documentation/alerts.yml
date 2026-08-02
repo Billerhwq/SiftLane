@@ -1,0 +1,38 @@
+groups:
+  - name: siftlane
+    rules:
+      - alert: SiftlaneDown
+        expr: up{job="siftlane"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          runbook: documentation/incident-response.md
+      - alert: SiftlaneQueueBacklog
+        expr: siftlane_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          runbook: documentation/operations.md
+      - alert: SiftlaneRunFailureRatio
+        expr: siftlane_runs{status="FAILED"} / clamp_min(sum(siftlane_runs), 1) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          runbook: documentation/incident-response.md
+      - alert: SiftlaneDeliveryDeadLetters
+        expr: siftlane_deliveries{status="dead_letter"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          runbook: documentation/delivery.md
+      - alert: SiftlaneDatabaseGrowth
+        expr: predict_linear(siftlane_database_bytes[6h], 24 * 3600) > 8589934592
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          runbook: documentation/operations.md

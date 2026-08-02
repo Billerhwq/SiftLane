@@ -36,6 +36,8 @@ if ($Install) {
         & $PythonExecutable -m venv (Join-Path $engineRoot ".venv")
         Assert-ExitCode "Create Python virtual environment"
     }
+    & $venvPython -m pip install --upgrade "pip>=26.1.2"
+    Assert-ExitCode "Upgrade Python package installer"
     & $venvPython -m pip install -e "$engineRoot[test]"
     Assert-ExitCode "Install engine dependencies"
 
@@ -93,7 +95,22 @@ finally {
     Pop-Location
 }
 
+$version = (Get-Content -Raw (Join-Path $repoRoot "VERSION")).Trim()
+$versionParts = $version.Split("-")[0].Split(".") | ForEach-Object { [int]$_ }
+if ($versionParts[0] -ge 1) {
+    & (Join-Path $PSScriptRoot "p5-qualification.ps1") -PythonExecutable $venvPython -SoakDurationSeconds 30
+    Assert-ExitCode "P5 capacity, backup and soak qualification"
+
+    $securityArguments = @{
+        PythonExecutable = $venvPython
+        NodeExecutable = $NodeExecutable
+        NpmCli = $NpmCli
+    }
+    & (Join-Path $PSScriptRoot "security-check.ps1") @securityArguments
+    Assert-ExitCode "P5 security checks"
+}
+
 & (Join-Path $PSScriptRoot "check-release.ps1") -PythonExecutable $venvPython
 Assert-ExitCode "Release metadata check"
 
-Write-Host "P1/P2 acceptance and release metadata gates passed."
+Write-Host "Siftlane lifecycle acceptance and release metadata gates passed."

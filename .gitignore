@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+engine/.test-tmp*/
 .coverage
 htmlcov/
 
@@ -29,4 +30,11 @@ outputs/*
 !outputs/p1-mobile.png
 !outputs/p2-branch-retry.png
 !outputs/p2-scheduler.png
+!outputs/p3-team-audit.png
+!outputs/p3-private-flow.png
+!outputs/p4-integrations-delivery.png
+!outputs/p5-production-readiness.png
+!outputs/p5-capacity-report.json
+!outputs/p5-soak-report.json
+!outputs/p5-backup-restore-report.json
 .impeccable/sketches/

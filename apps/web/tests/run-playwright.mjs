@@ -1,10 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const webRoot = fileURLToPath(new URL("../", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const runner = fileURLToPath(import.meta.url);
 const engineRoot = join(repoRoot, "engine");
 const cli = join(webRoot, "node_modules", "@playwright", "test", "cli.js");
 const args = process.argv.slice(2);
@@ -43,8 +44,19 @@ async function waitForUrl(url, label, child, timeoutMs) {
   throw new Error(`${label} did not become ready: ${url}`);
 }
 
+function stopWindowsProcessTree(pid) {
+  spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+}
+
 function stopChild(child) {
   if (!child || child.exitCode !== null || !child.pid) return;
+  if (process.platform === "win32") {
+    stopWindowsProcessTree(child.pid);
+    return;
+  }
   child.kill("SIGTERM");
 }
 
@@ -56,7 +68,7 @@ function stopWindowsListeners(ports) {
     const match = line.match(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i);
     if (!match || !ports.includes(Number(match[1]))) continue;
     try {
-      process.kill(Number(match[2]));
+      stopWindowsProcessTree(Number(match[2]));
     } catch {
       // The direct child termination may already have closed the listener.
     }
@@ -102,12 +114,16 @@ async function startServices() {
       SIFTLANE_ENGINE_DATA_DIR: dataDir,
       SIFTLANE_ENGINE_ALLOW_PRIVATE_NETWORKS: "true",
       SIFTLANE_ENGINE_REQUEST_MIN_DELAY_SECONDS: "0",
+      SIFTLANE_ENGINE_AUTH_MODE: "team",
+      SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_USERNAME: "admin",
+      SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_PASSWORD: "Admin-password-123",
+      SIFTLANE_ENGINE_SECRET_KEY: "e2e-engine-secret-key-32-characters-long",
     },
     stdio: "inherit",
   });
   fixture = spawn(
     python,
-    ["-m", "http.server", "8877", "--bind", "127.0.0.1", "--directory", join(engineRoot, "tests", "fixtures")],
+    ["-u", "-m", "http.server", "8877", "--bind", "127.0.0.1", "--directory", join(engineRoot, "tests", "fixtures")],
     { cwd: engineRoot, stdio: "inherit" },
   );
   const viteNode = process.env.SIFTLANE_E2E_VITE_NODE ?? process.execPath;
@@ -119,24 +135,49 @@ async function startServices() {
 
   await Promise.all([
     waitForUrl("http://127.0.0.1:8090/health", "engine", engine, 120_000),
-    waitForUrl("http://127.0.0.1:8877/integration.html", "fixture", fixture, 30_000),
-    waitForUrl("http://127.0.0.1:5173", "Vite", vite, 60_000),
+    waitForUrl("http://127.0.0.1:8877/integration.html", "fixture (127.0.0.1:8877)", fixture, 120_000),
+    waitForUrl("http://127.0.0.1:5173", "Vite (127.0.0.1:5173)", vite, 120_000),
   ]);
 }
 
+function runPlaywright(playwrightArgs) {
+  const result = spawnSync(process.execPath, [cli, ...playwrightArgs], {
+    cwd: webRoot,
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: join(webRoot, ".playwright-browsers"),
+    },
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+function runIsolatedSpec(spec) {
+  const result = spawnSync(process.execPath, [runner, "test", spec], {
+    cwd: webRoot,
+    env: process.env,
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
 async function main() {
+  if (command === "test" && args.length === 1) {
+    const specs = readdirSync(join(webRoot, "tests"))
+      .filter((name) => name.endsWith(".spec.ts"))
+      .sort();
+    for (const spec of specs) {
+      const status = runIsolatedSpec(spec);
+      if (status !== 0) return status;
+    }
+    return 0;
+  }
+
   try {
     if (command === "test") await startServices();
-    const result = spawnSync(process.execPath, [cli, ...(args.length ? args : ["test"])], {
-      cwd: webRoot,
-      env: {
-        ...process.env,
-        PLAYWRIGHT_BROWSERS_PATH: join(webRoot, ".playwright-browsers"),
-      },
-      stdio: "inherit",
-    });
-    if (result.error) throw result.error;
-    return result.status ?? 1;
+    return runPlaywright(args.length ? args : ["test"]);
   } finally {
     cleanup();
   }

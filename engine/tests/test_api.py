@@ -243,7 +243,8 @@ def test_capabilities_expose_connector_contract(tmp_path):
         capabilities = client.get("/api/v1/capabilities")
         assert capabilities.status_code == 200
         assert capabilities.json()["features"]["connectorSdk"] is True
-        assert capabilities.json()["connectorCount"] == 0
+        assert capabilities.json()["connectorCount"] == 1
+        assert capabilities.json()["features"]["managedConnectors"] is True
         connectors = client.get("/api/v1/connectors")
         assert connectors.status_code == 200
         assert connectors.json() == []

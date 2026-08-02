@@ -1,35 +1,39 @@
 ---
-name: Siftlane Cloud Blue Console
-description: A precise, light operations console for inspectable crawler workflows.
+name: SiftLane Lane Studio
+description: A quiet, inspectable automation studio for building crawlers and reading their captured evidence.
 colors:
-  brand: "#0052d9"
-  brand-hover: "#003eb3"
-  brand-soft: "#e8f2ff"
-  app-background: "#f2f5f8"
-  canvas: "#f5f9fd"
+  primary: "#3568c8"
+  primary-hover: "#28539f"
+  primary-soft: "#edf3ff"
+  canvas: "#f7f9fc"
   surface: "#ffffff"
-  surface-subtle: "#f8fafc"
-  text: "#1b2b42"
-  text-muted: "#60748b"
-  line: "#dce4ec"
-  line-strong: "#bac7d5"
-  success: "#007a52"
-  success-soft: "#e8f8f2"
-  warning: "#c45f18"
-  warning-soft: "#fff6e8"
-  danger: "#c93535"
-  danger-soft: "#fff0ed"
+  surface-subtle: "#f6f8fa"
+  text: "#202124"
+  text-muted: "#667085"
+  line: "#e2e6eb"
+  line-strong: "#c9d0d9"
+  success: "#2f7a44"
+  success-soft: "#eaf6ed"
+  warning: "#ad6516"
+  warning-soft: "#fff5df"
+  danger: "#be4c45"
+  danger-soft: "#fff0ee"
+  accent-sun: "#f0cc68"
+  accent-coral: "#eaa39d"
+  accent-mint: "#78bf95"
+  accent-violet: "#4632a5"
 typography:
   headline:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
-    fontSize: "19px"
+    fontSize: "20px"
     fontWeight: 700
     lineHeight: 1.25
     letterSpacing: "0"
-  title:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
-    fontSize: "13px"
-    fontWeight: 700
+  reading:
+    fontFamily: '"Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", serif'
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.95
     letterSpacing: "0"
   body:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
@@ -48,37 +52,49 @@ typography:
     letterSpacing: "0"
 rounded:
   xs: "3px"
-  sm: "4px"
-  md: "6px"
-  toggle: "9px"
+  sm: "6px"
+  md: "7px"
+  lg: "8px"
   circle: "50%"
 spacing:
   tight: "4px"
   compact: "8px"
   control: "12px"
   section: "16px"
-  view: "20px"
+  view: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.brand}"
+    backgroundColor: "{colors.primary}"
     textColor: "{colors.surface}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "0 12px"
     height: "34px"
   button-primary-hover:
-    backgroundColor: "{colors.brand-hover}"
+    backgroundColor: "{colors.primary-hover}"
     textColor: "{colors.surface}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "0 12px"
     height: "34px"
   button-secondary:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "0 12px"
     height: "34px"
-  input:
+  icon-button:
     backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-muted}"
+    rounded: "{rounded.md}"
+    width: "34px"
+    height: "34px"
+  utility-action:
+    backgroundColor: "{colors.surface-subtle}"
+    textColor: "{colors.text-muted}"
+    rounded: "{rounded.circle}"
+    width: "40px"
+    height: "40px"
+  input:
+    backgroundColor: "{colors.surface-subtle}"
     textColor: "{colors.text}"
     typography: "{typography.mono}"
     rounded: "{rounded.sm}"
@@ -87,177 +103,187 @@ components:
   workflow-node:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
-    rounded: "{rounded.sm}"
-    width: "188px"
-    height: "104px"
-  status-badge-success:
-    backgroundColor: "{colors.success-soft}"
-    textColor: "{colors.success}"
-    typography: "{typography.label}"
-    rounded: "{rounded.xs}"
-    height: "22px"
+    rounded: "{rounded.md}"
+    width: "196px"
+    height: "110px"
+  result-row:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    height: "52px"
 ---
 
-# Design System: Siftlane Cloud Blue Console
+# Design System: SiftLane Lane Studio
 
 ## Overview
 
-**Creative North Star: "The Live Execution Lane"**
+**Creative North Star: "The Clear Automation Workbench"**
 
-Siftlane is a calm, exacting control room organized around the execution path itself. The pale-blue workflow field is the visual center of gravity; cool-white rails, compact controls, and fine separators keep configuration and operational evidence close without turning the screen into a dashboard of detached cards.
+Lane Studio is a quiet desktop workbench where operators build a crawl as a visible sequence, watch execution evidence, and move directly from captured rows into readable source detail. It combines a pale technical canvas with a full-viewport white application shell, precise dividers, and small moments of sun, coral, mint, and violet so different node roles remain recognizable without turning the product into a one-hue console.
 
-The system is deliberately light, dense, and inspectable. Blue carries action, selection, focus, active paths, and live informational state. Semantic green, amber, and red remain independent so operators can distinguish success, caution, and failure without relying on position or memory. The Siftlane lane mark and name remain visible in the first viewport and establish an identity independent of any host product.
+The design is dense but not cramped. Navigation and status stay fixed around the work, the graph remains the visual center, and details replace the center surface instead of appearing in a drawer or modal. The edge-to-edge shell feels like a purpose-built local application rather than a dashboard assembled from cards.
 
 **Key Characteristics:**
 
-- Continuous control-room composition rather than a collection of floating panels.
-- A pale-blue dotted graph field framed by cool-white operational rails.
-- Compact square controls, crisp 1px borders, and radii no larger than 6px for overlays.
-- Written state labels, icons, and color used together.
-- Monospace reserved for identifiers, selectors, timestamps, event types, and code values.
+- One full-viewport, continuous studio with a 64px utility rail, 248px flow rail, flexible workspace, and 316px inspector.
+- A restrained neutral foundation with blue for action and distinct semantic and node-role accents.
+- Compact controls, 6-8px corners, stable dimensions, and no nested dashboard cards.
+- System sans for operation, monospace for inspectable values, and a Chinese serif stack for captured article reading.
+- Purposeful surface transitions that disappear when reduced motion is requested.
 
 ## Colors
 
-The palette is cool, bright, and operational: one cloud-blue action family, restrained blue-gray neutrals, and clearly separated semantic states.
+The palette is light, neutral, and tool-like, with one dependable action blue and a small set of warm and cool accents for orientation.
 
 ### Primary
 
-- **Console Blue** (`brand`): Primary actions, active tabs, focused controls, selected paths, live events, and the lane mark.
-- **Deep Console Blue** (`brand-hover`): Hover state for filled primary actions.
-- **Selection Blue** (`brand-soft`): Selected rows, node-type tiles, compact badges, and informative highlights.
+- **Lane Blue** (`primary`): Primary commands, selected navigation, focus, active graph state, and links.
+- **Deep Lane Blue** (`primary-hover`): Hover and pressed treatment for filled actions.
+- **Selection Wash** (`primary-soft`): Selected flows, active utilities, node-role tiles, and table-row emphasis.
 
 ### Secondary
 
-- **Execution Green** (`success` / `success-soft`): Completed nodes, healthy engine state, successful runs, and success badges.
-- **Policy Amber** (`warning` / `warning-soft`): Policy notes, cancelling state, and warning events.
-- **Failure Red** (`danger` / `danger-soft`): Failed or disconnected state, validation errors, destructive actions, and error surfaces.
+- **Completion Green** (`success` / `success-soft`): Healthy engine state, completed work, enabled state, and the start-node family.
+- **Attention Amber** (`warning` / `warning-soft`): Policy and caution states.
+- **Failure Coral** (`danger` / `danger-soft`): Failures, invalid fields, destructive actions, and error surfaces.
+
+### Tertiary
+
+- **Connection Sun** (`accent-sun`): Sparse structural highlights in the empty-workflow illustration.
+- **Activity Coral** (`accent-coral`): Current activity and selected content cues.
+- **Evidence Mint** (`accent-mint`): Live evidence dots, article provenance, and positive flow accents.
+- **Identity Violet** (`accent-violet`): User identity only; never a general action color.
 
 ### Neutral
 
-- **Cool Application Ground** (`app-background`): The shell behind working surfaces.
-- **Graph Mist** (`canvas`): The dominant workflow field.
-- **Console White** (`surface`): Rails, bars, controls, tables, nodes, dialogs, and drawers.
-- **Subtle Console White** (`surface-subtle`): Search and low-emphasis control fills.
-- **Ink Blue** (`text`): Primary labels and operational content.
-- **Telemetry Gray** (`text-muted`): Secondary labels, metadata, and inactive states.
-- **Hairline Blue Gray** (`line`): Default separators and table rules.
-- **Control Blue Gray** (`line-strong`): Input, control, and floating-panel boundaries.
+- **Working Canvas** (`canvas`): Graph and low-emphasis data backgrounds.
+- **Paper Surface** (`surface`): Bars, rails, nodes, tables, and the article document.
+- **Quiet Surface** (`surface-subtle`): Search, metadata, and secondary control fills.
+- **Graphite Text** (`text`): Primary content and labels.
+- **Measured Gray** (`text-muted`): Secondary copy and technical context.
+- **Hairline** (`line`): Section, row, and shell dividers.
+- **Control Line** (`line-strong`): Input and control boundaries.
 
-**The One Operational Blue Rule.** Blue may identify action or live information, but it must not absorb success, warning, or failure semantics.
+**The Semantic Independence Rule.** Blue communicates action and selection; green, amber, and coral keep their own operational meanings.
 
-**The Written State Rule.** Every semantic color is paired with a readable label, icon, or status text; color is never the only signal.
+**The Accent Restraint Rule.** Sun, coral, mint, and violet identify roles or moments. They do not become broad background themes.
 
 ## Typography
 
-**Display Font:** None; this system has no hero typography.
+**Display Font:** None; Lane Studio has no marketing or hero scale.
 
 **Body Font:** Native system UI sans with Segoe UI, PingFang SC, and Microsoft YaHei fallbacks.
 
+**Reading Font:** Source Han Serif SC with Noto Serif CJK SC and Songti SC fallbacks.
+
 **Label/Mono Font:** SFMono-Regular with Consolas and Liberation Mono fallbacks.
 
-**Character:** Compact, familiar, and machine-adjacent without making the whole product look like a code editor. UI sans carries actions and explanations; mono gives durable technical values a distinct scanning rhythm.
+**Character:** Operational text remains familiar and compact, technical identifiers remain easy to compare, and captured articles switch to a calmer editorial rhythm without changing the application shell.
 
 ### Hierarchy
 
-- **Headline** (700, 19px, 1.25): Results headings; the canvas flow title may rise to 21px and compresses to 17px on narrow screens.
-- **Title** (700, 13px): Rail, inspector, and dialog headings.
-- **Body** (400, 11px): Buttons, list names, breadcrumbs, and explanatory text.
-- **Label** (600, 10px): Tabs, field labels, statuses, table headers, and compact operational metadata.
-- **Mono** (400, 10px): Node IDs, revisions, timestamps, event types, selectors, URLs, and schema-backed field values.
+- **Headline** (700, 20px, 1.25): Workspace and empty-state titles; article titles use the reading stack at 30px and 1.45.
+- **Title** (600-700, 12-16px): Brand, rail, inspector, and data-view titles.
+- **Reading** (400, 15px, 1.95): Article body copy in the independent detail view, capped by the 760px document column.
+- **Body** (400, 11px): Navigation, actions, list rows, explanations, and table content.
+- **Label** (600, 9-10px): Status, fields, tabs, metadata, and table headers.
+- **Mono** (400, 9-10px): IDs, URLs, selectors, timestamps, counts, and serialized metadata.
 
-**The No Hero Type Rule.** Operate surfaces use compact hierarchy; do not import marketing-scale headings into the console.
+**The No Hero Type Rule.** This is an operate-first product; headings stay proportional to the surrounding tool surface.
 
-**The Technical Value Rule.** Use monospace for values an operator may compare or copy, not for ordinary navigation or prose.
+**The Reading Shift Rule.** Serif appears only when the user enters captured article content. Controls, metadata, and surrounding navigation remain sans or mono.
 
 ## Layout
 
-The desktop shell fills `100dvh` and never scrolls at the document level. At full width it uses a 60px top bar, a 62px status strip, and a three-column work area: a 232px flow rail, a flexible center with a 560px minimum, and a 320px inspector. The center stacks a 46px workspace bar, the flexible content view, and a fixed 108px two-line event dock. Results and run history replace only the central content view; the surrounding operational context stays fixed.
+Desktop uses an edge-to-edge `100dvh` shell with no outer margin, a 62px top bar, and a 44px status row. Below those rows, four stable tracks organize the application: a 64px utility rail, a 248px flow rail, a flexible workspace with a 580px minimum, and a 316px inspector. The workspace stacks a 52px view bar, flexible canvas/result/detail content, and a 96px live event dock.
 
-At 1180px, the side rails compact to 210px and 288px and the center minimum becomes 520px. At 900px and below, the shell becomes one column: the flow rail and inspector become edge drawers, breadcrumbs and secondary desktop actions disappear, status statistics collapse, and the minimap is removed. At 560px and below, the workspace bar becomes 44px, the event dock becomes 94px, text commands collapse to familiar icons, and event lines retain the message while hiding timestamp and type. The graph itself remains full scale and pannable; nodes do not shrink into illegibility.
+The graph and result table occupy the same central surface. Selecting a result replaces that surface with the independent article detail view; it never opens a drawer or dialog. The detail view uses a flexible reading document plus a 264px facts column, with a sticky 54px action bar.
 
-Spacing is intentionally dense and locally tuned around a compact 4/8/12/16/20px rhythm. Fixed dimensions keep toolbars, nodes, event rows, icon controls, and status counters stable as data changes.
+At 1280px, the shell compacts to 60/220/flexible/288px. At 960px, flow and inspector rails become explicit edge panels while the utility rail remains. At 680px, the utility rail disappears, the shell becomes a single-column full viewport, and detail controls expand to at least 44px. Detail mode also compresses top/status/workspace chrome so the article owns the available height.
 
-**The Continuous Workspace Rule.** Rails, canvas, results, and live evidence belong to one full-height shell; do not recast each region as a floating card.
+Spacing follows a practical 4/8/12/16/24px rhythm. Fixed heights and grid tracks prevent statuses, loading text, buttons, nodes, and table content from shifting the shell.
 
-**The Preserve-the-Graph Rule.** On narrow screens, collapse chrome into drawers and icon controls while preserving node scale and canvas interaction.
+**The Continuous Studio Rule.** Navigation, graph, evidence, results, and details belong to one application frame, not a collection of floating cards.
+
+**The Replace-the-Center Rule.** Canvas, results, history, and article detail are peer views that replace the center region while preserving operational context.
 
 ## Elevation & Depth
 
-The system is flat by default. Tonal layering and 1px borders establish the shell, while low ambient shadows are reserved for graph nodes and controls. Stronger directional shadows appear only where a layer must detach from the workspace: node library, anchored event ledger, drawer, toast, or modal. There are no decorative shadows on ordinary sections.
+The system uses tonal layering and hairline borders by default. The application shell stays flat against the browser viewport. Workflow nodes use a low work-surface shadow; selected nodes gain a blue-tinted lift. Strong shadows are reserved for temporary layers such as the node library, event ledger, edge panel, toast, and dialog.
 
 ### Shadow Vocabulary
 
-- **Graph lift** (`0 3px 10px rgba(49, 73, 104, 0.07)`): Workflow nodes at rest.
-- **Floating control** (`0 3px 10px rgba(49, 73, 104, 0.08)`): React Flow controls and minimap.
-- **Floating panel** (`0 14px 38px rgba(27, 43, 66, 0.18)`): Node library and mobile rail separation.
-- **Anchored ledger** (`0 -16px 38px rgba(27, 43, 66, 0.16)`): Complete event history disclosed upward from the live dock.
-- **Modal lift** (`0 22px 64px rgba(27, 43, 66, 0.25)`): Blocking dialogs only.
+- **Node rest** (`0 7px 20px rgba(51, 67, 88, .1)`): Workflow nodes at rest.
+- **Node active** (`0 11px 28px rgba(53, 104, 200, .18)`): Selected and running nodes.
+- **Floating layer** (`0 16px 46px rgba(35, 49, 68, .16)`): Temporary libraries, dialogs, and drawers.
+- **Anchored ledger** (`0 -18px 48px rgba(35, 49, 68, .18)`): The event record disclosed upward from its dock.
 
-**The Flat-by-Default Rule.** A shadow must explain layering or interaction; it must never decorate a static content section.
+**The Full Viewport Rule.** The application shell reaches every browser edge; ordinary sections inside it remain flat and connected.
 
-**The Anchored Disclosure Rule.** The complete event ledger rises from its dock without moving the canvas, rails, or operator's working position.
+**The Functional Depth Rule.** Strong elevation must identify a temporary or selected layer, never decorate static content.
 
 ## Shapes
 
-The form language is rectangular and compact. Most controls, nodes, rows, notes, and table containers use gently squared 4px corners; tiny badges and icon tiles use 3px; dialogs and floating libraries may use 6px. Circular geometry is limited to status dots, connection handles, and switch thumbs. Borders are generally 1px; a selected or running node uses a 2px Console Blue boundary.
+Lane Studio uses softly squared geometry. Inputs use 6px corners, core controls and nodes use 7px, and shell or temporary surfaces use 8px. Circular form is reserved for utility-rail actions, status dots, connection handles, and user identity. Result rows and document regions remain rectangular and are separated by hairlines.
 
-**The Compact Corner Rule.** Ordinary console surfaces stop at 4px and floating overlays stop at 6px; avoid pill-shaped labels and soft card silhouettes.
+**The Small Radius Rule.** Repeated operational surfaces stay at 8px or below; do not introduce oversized soft cards or pills.
 
 ## Components
 
 ### Buttons
 
-- **Shape:** Compact rectangular controls with gently squared corners (4px); standard height is 34px and workspace commands may compact to 30px.
-- **Primary:** Console Blue fill, Console White label, 12px horizontal padding, 600 weight.
-- **Hover / Focus:** Filled actions deepen to Deep Console Blue. Secondary controls move to a pale-blue surface with blue text and border. Keyboard focus is a 2px Console Blue outline with a 2px offset.
-- **Secondary / Icon:** White fill and Control Blue Gray border. Icon-only controls remain stable squares, use Lucide symbols, and always carry an accessible name or tooltip.
-- **Disabled:** Preserve geometry and reduce opacity to 48%; use a not-allowed cursor.
+- **Shape:** Stable 34px controls with 7px corners; the top-level run action may use 38px height.
+- **Primary:** Lane Blue fill, white label, and 12-15px horizontal padding.
+- **Hover / Focus:** Primary actions deepen to Deep Lane Blue. Secondary and icon controls receive Selection Wash and blue text. Keyboard focus uses a 2px Lane Blue outline with a 2px offset.
+- **Icon:** Use Lucide symbols in stable squares and provide an accessible name or native tooltip.
+- **Mobile detail:** Back, previous, next, original-source, and event controls expand to at least 44px.
 
-### Chips
+### Utility Rail
 
-- **Style:** Status badges are compact 22px-high rectangles with 3px corners and written labels.
-- **State:** Live and queued use Selection Blue; success, warning, and failure use their own semantic soft/strong pairs.
+- **Style:** A 64px neutral rail with 40px circular icon actions and a 6px vertical rhythm.
+- **State:** Selected tools receive Selection Wash plus a 3px left Lane Blue marker.
 
-### Cards / Containers
+### Workflow Nodes
 
-- **Corner Style:** Siftlane does not use generic dashboard cards. Workflow nodes are the signature framed object and use 4px corners.
-- **Background:** Console White over Graph Mist.
-- **Shadow Strategy:** Low graph lift only; see Elevation & Depth.
-- **Border:** 1px cool-blue boundary at rest; 2px Console Blue when selected or running; semantic red on failure.
-- **Internal Padding:** A 30px technical header followed by compact 9-12px content in a fixed 188x104px frame.
+- **Shape:** Fixed 196x110px white nodes with 7px corners and a 32px technical header.
+- **Role color:** Start, HTTP, extraction, branching, and emit roles use different restrained icon-tile colors while the node body stays neutral.
+- **State:** Running or selected uses a 2px Lane Blue edge and active lift; completion and failure retain independent semantic colors.
 
 ### Inputs / Fields
 
-- **Style:** Console White fill, 1px Control Blue Gray border, 4px corners, and 10px monospace values; standard single-line height is 32px.
-- **Focus:** Console Blue border plus a restrained 2px translucent blue halo.
-- **Error / Disabled:** Error changes the boundary and message to Failure Red. Disabled fields use a cool gray fill and muted value while preserving contrast.
-
-### Navigation
-
-The top bar, flow rail, workspace tabs, and inspector are continuous white rails separated by hairlines. Active tabs use Console Blue text and a 2px underline. Selected flows use Selection Blue plus a visible border. At 900px the flow rail and inspector become left and right drawers behind explicit menu and panel controls; a neutral scrim communicates modality.
-
-### Live Activity Dock
-
-The persistent dock shows at most two recent events, a readable connection or run state, and a compact disclosure control. The full ordered ledger is an anchored overlay with sequence, message, type, and time columns; warning and error messages use semantic color while preserving their text.
+- **Style:** Quiet Surface fill, 1px Control Line, 6px corners, and monospace values at a stable 32px single-line height.
+- **Focus:** White fill, Lane Blue boundary, and a restrained 3px translucent halo.
+- **Error / Disabled:** Failure Coral boundary and message for errors; muted fill and readable reduced emphasis for disabled fields.
 
 ### Results Table
 
-Results use a bordered, scrollable table with a sticky cool-gray header and a 760px content minimum. Rows use pale-blue hover/selection, technical values remain compact, and long URLs or descriptions truncate rather than resizing the shell.
+- **Style:** One 7px framed table surface with a 40px sticky header and stable 52px rows.
+- **Interaction:** Rows are pointer and keyboard targets. Hover and selection use a pale blue surface without changing row height.
+- **Transition:** Activating a row switches the workspace to the independent detail panel and preserves the row for focus restoration.
+
+### Article Detail
+
+- **Structure:** Sticky action bar, centered paper document, and a separate 264px provenance column.
+- **Reading:** Title and body use the serif reading stack; metadata, IDs, and controls preserve the studio's compact operational typography.
+- **Navigation:** Back, previous, next, and open-original actions are always available. Escape returns to results, arrow keys traverse items, and the result row regains focus on return.
+
+### Navigation
+
+The top bar, utility rail, flow rail, workspace tabs, and inspector form one continuous shell. Selected tabs use Lane Blue text and a 3px baseline. At 960px the flow rail and inspector become edge panels behind explicit controls; at 680px the utility rail is removed and the top bar carries the essential commands.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** keep the workflow canvas dominant and preserve the flow rail, engine state, inspector context, and two live activity lines around it.
-- **Do** use Console Blue for action, focus, selection, active paths, and live information, with semantic colors reserved for their stated meanings.
-- **Do** pair status color with text or icons and maintain visible keyboard focus.
-- **Do** preserve full-scale pannable nodes on mobile while moving side rails into drawers.
-- **Do** use the Siftlane lane mark, product name, and Cloud Blue Console vocabulary as the first-viewport identity.
+- **Do** keep the graph or currently selected evidence as the dominant center surface.
+- **Do** preserve the 64/248/flexible/316 desktop structure and its documented responsive collapses.
+- **Do** use role accents sparingly and always keep status meaning readable in text.
+- **Do** treat article detail as a full center view with reading typography, metadata, keyboard navigation, and focus restoration.
+- **Do** keep operational controls compact on desktop and at least 44px in mobile detail mode.
 
 ### Don't:
 
-- **Don't** import SubtleSight colors, components, navigation, logo, dark shell, AI-assistant styling, or document-editor patterns.
-- **Don't** convert the console into bento cards, oversized metrics, a marketing hero, nested cards, decorative gradients, glass effects, or rounded pills.
-- **Don't** hide the complete event record or expand it in a way that moves the operator's canvas position.
-- **Don't** imply unshipped browser automation, authenticated platform adapters, or arbitrary Python/JavaScript execution through labels, icons, or example states.
-- **Don't** make success, warning, failure, or cancellation blue.
+- **Don't** open captured item detail in a drawer, modal, or dialog.
+- **Don't** convert the studio into a bento dashboard, nested cards, a marketing hero, or a decorative gradient field.
+- **Don't** make every node and status blue; preserve role and semantic distinctions.
+- **Don't** scale graph nodes down for mobile; collapse surrounding chrome and keep the work readable.
+- **Don't** use the reading serif for navigation, form controls, status, or metadata.

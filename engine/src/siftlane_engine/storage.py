@@ -13,9 +13,11 @@ from typing import Any
 import aiosqlite
 
 from .models import (
+    AuditRecord,
     EventRecord,
     FlowDefinition,
     FlowRecord,
+    FlowVisibility,
     ItemRecord,
     NodeCheckpoint,
     RunFlowSnapshot,
@@ -23,13 +25,55 @@ from .models import (
     RunStatus,
     ScheduleDefinition,
     ScheduleRecord,
+    UserRecord,
+    UserRole,
     utc_now,
 )
+
+
+SCHEMA_VERSION = 5
+MIN_COMPATIBLE_SCHEMA_VERSION = 2
 
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL,
+  active INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY,
+  actor_user_id TEXT,
+  actor_username TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  outcome TEXT NOT NULL,
+  detail_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_events(created_at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS flows (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -39,6 +83,8 @@ CREATE TABLE IF NOT EXISTS flows (
   timeout_seconds INTEGER NOT NULL,
   parameter_schema_json TEXT NOT NULL,
   graph_json TEXT NOT NULL,
+  owner_id TEXT NOT NULL DEFAULT 'local-operator',
+  visibility TEXT NOT NULL DEFAULT 'team',
   revision INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -49,6 +95,9 @@ CREATE TABLE IF NOT EXISTS runs (
   flow_name TEXT NOT NULL,
   flow_revision INTEGER NOT NULL,
   flow_snapshot_json TEXT NOT NULL,
+  owner_id TEXT NOT NULL DEFAULT 'local-operator',
+  visibility TEXT NOT NULL DEFAULT 'team',
+  created_by TEXT NOT NULL DEFAULT 'local-operator',
   status TEXT NOT NULL,
   parameters_json TEXT NOT NULL,
   idempotency_key TEXT,
@@ -112,6 +161,9 @@ CREATE TABLE IF NOT EXISTS schedules (
   timezone TEXT NOT NULL,
   enabled INTEGER NOT NULL,
   parameters_json TEXT NOT NULL,
+  owner_id TEXT NOT NULL DEFAULT 'local-operator',
+  visibility TEXT NOT NULL DEFAULT 'team',
+  created_by TEXT NOT NULL DEFAULT 'local-operator',
   next_run_at TEXT,
   last_run_at TEXT,
   last_run_id TEXT REFERENCES runs(id),
@@ -144,14 +196,53 @@ class Storage:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             await db.executescript(SCHEMA)
-            columns = {
+            run_columns = {
                 row["name"]
                 for row in await (await db.execute("PRAGMA table_info(runs)")).fetchall()
             }
-            if "flow_revision" not in columns:
+            if "flow_revision" not in run_columns:
                 await db.execute("ALTER TABLE runs ADD COLUMN flow_revision INTEGER")
-            if "flow_snapshot_json" not in columns:
+            if "flow_snapshot_json" not in run_columns:
                 await db.execute("ALTER TABLE runs ADD COLUMN flow_snapshot_json TEXT")
+            for name, declaration in {
+                "owner_id": "TEXT NOT NULL DEFAULT 'local-operator'",
+                "visibility": "TEXT NOT NULL DEFAULT 'team'",
+                "created_by": "TEXT NOT NULL DEFAULT 'local-operator'",
+            }.items():
+                if name not in run_columns:
+                    await db.execute(f"ALTER TABLE runs ADD COLUMN {name} {declaration}")
+
+            flow_columns = {
+                row["name"]
+                for row in await (await db.execute("PRAGMA table_info(flows)")).fetchall()
+            }
+            for name, declaration in {
+                "owner_id": "TEXT NOT NULL DEFAULT 'local-operator'",
+                "visibility": "TEXT NOT NULL DEFAULT 'team'",
+            }.items():
+                if name not in flow_columns:
+                    await db.execute(f"ALTER TABLE flows ADD COLUMN {name} {declaration}")
+
+            schedule_columns = {
+                row["name"]
+                for row in await (await db.execute("PRAGMA table_info(schedules)")).fetchall()
+            }
+            for name, declaration in {
+                "owner_id": "TEXT NOT NULL DEFAULT 'local-operator'",
+                "visibility": "TEXT NOT NULL DEFAULT 'team'",
+                "created_by": "TEXT NOT NULL DEFAULT 'local-operator'",
+            }.items():
+                if name not in schedule_columns:
+                    await db.execute(
+                        f"ALTER TABLE schedules ADD COLUMN {name} {declaration}"
+                    )
+            now = utc_now().isoformat()
+            await db.execute(
+                """INSERT OR IGNORE INTO users(
+                     id,username,display_name,password_hash,role,active,created_at,updated_at
+                   ) VALUES('local-operator','local','Local operator','',?,1,?,?)""",
+                (UserRole.ADMIN.value, now, now),
+            )
             await db.execute(
                 """UPDATE runs
                    SET flow_revision=COALESCE(
@@ -164,6 +255,36 @@ class Storage:
                        )
                    WHERE flow_revision IS NULL OR flow_snapshot_json IS NULL"""
             )
+            await db.execute(
+                """UPDATE runs SET
+                     owner_id=COALESCE(NULLIF(owner_id,''),
+                       (SELECT owner_id FROM flows WHERE flows.id=runs.flow_id),
+                       'local-operator'),
+                     visibility=COALESCE(NULLIF(visibility,''),
+                       (SELECT visibility FROM flows WHERE flows.id=runs.flow_id),
+                       'team'),
+                     created_by=COALESCE(NULLIF(created_by,''),'local-operator')"""
+            )
+            await db.execute(
+                """UPDATE schedules SET
+                     owner_id=COALESCE(NULLIF(owner_id,''),
+                       (SELECT owner_id FROM flows WHERE flows.id=schedules.flow_id),
+                       'local-operator'),
+                     visibility=COALESCE(NULLIF(visibility,''),
+                       (SELECT visibility FROM flows WHERE flows.id=schedules.flow_id),
+                       'team'),
+                     created_by=COALESCE(NULLIF(created_by,''),'local-operator')"""
+            )
+            await db.execute(
+                """INSERT INTO schema_meta(key,value) VALUES('schema_version',?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                (str(SCHEMA_VERSION),),
+            )
+            await db.execute(
+                """INSERT INTO schema_meta(key,value) VALUES('last_migration_at',?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                (now,),
+            )
             await db.commit()
 
     async def _connect(self) -> aiosqlite.Connection:
@@ -171,6 +292,318 @@ class Storage:
         db.row_factory = aiosqlite.Row
         await db.execute("PRAGMA foreign_keys=ON")
         return db
+
+    async def count_team_users(self) -> int:
+        db = await self._connect()
+        try:
+            row = await (
+                await db.execute(
+                    "SELECT COUNT(*) AS total FROM users WHERE id<>'local-operator'"
+                )
+            ).fetchone()
+            return int(row["total"])
+        finally:
+            await db.close()
+
+    async def schema_status(self) -> dict[str, Any]:
+        db = await self._connect()
+        try:
+            rows = await (await db.execute("SELECT key,value FROM schema_meta")).fetchall()
+            values = {row["key"]: row["value"] for row in rows}
+            await db.execute("SELECT 1")
+            return {
+                "current": int(values.get("schema_version", "0")),
+                "supportedMinimum": MIN_COMPATIBLE_SCHEMA_VERSION,
+                "latest": SCHEMA_VERSION,
+                "lastMigrationAt": values.get("last_migration_at"),
+                "ready": int(values.get("schema_version", "0")) == SCHEMA_VERSION,
+            }
+        finally:
+            await db.close()
+
+    async def operational_stats(self) -> dict[str, dict[str, int] | int]:
+        db = await self._connect()
+        try:
+            run_rows = await (await db.execute("SELECT status,COUNT(*) AS total FROM runs GROUP BY status")).fetchall()
+            delivery_table = await (
+                await db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='deliveries'"
+                )
+            ).fetchone()
+            delivery_rows = (
+                await (await db.execute("SELECT status,COUNT(*) AS total FROM deliveries GROUP BY status")).fetchall()
+                if delivery_table
+                else []
+            )
+            database_bytes = self.path.stat().st_size if self.path.exists() else 0
+            return {
+                "runs": {row["status"]: int(row["total"]) for row in run_rows},
+                "deliveries": {row["status"]: int(row["total"]) for row in delivery_rows},
+                "databaseBytes": database_bytes,
+            }
+        finally:
+            await db.close()
+
+    async def create_user(
+        self,
+        *,
+        username: str,
+        display_name: str,
+        password_hash: str,
+        role: UserRole,
+    ) -> UserRecord:
+        now = utc_now()
+        user_id = str(uuid.uuid4())
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute(
+                    """INSERT INTO users(
+                         id,username,display_name,password_hash,role,active,
+                         created_at,updated_at
+                       ) VALUES(?,?,?,?,?,1,?,?)""",
+                    (
+                        user_id,
+                        username,
+                        display_name,
+                        password_hash,
+                        role.value,
+                        now.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+                await db.commit()
+            finally:
+                await db.close()
+        user = await self.get_user(user_id)
+        if user is None:
+            raise RuntimeError("user was not persisted")
+        return user
+
+    async def list_users(self) -> list[UserRecord]:
+        db = await self._connect()
+        try:
+            rows = await (
+                await db.execute(
+                    """SELECT * FROM users WHERE id<>'local-operator'
+                       ORDER BY username"""
+                )
+            ).fetchall()
+            return [self._user(row) for row in rows]
+        finally:
+            await db.close()
+
+    async def get_user(self, user_id: str) -> UserRecord | None:
+        db = await self._connect()
+        try:
+            row = await (
+                await db.execute("SELECT * FROM users WHERE id=?", (user_id,))
+            ).fetchone()
+            return self._user(row) if row else None
+        finally:
+            await db.close()
+
+    async def get_user_credentials(
+        self, username: str
+    ) -> tuple[UserRecord, str] | None:
+        db = await self._connect()
+        try:
+            row = await (
+                await db.execute(
+                    "SELECT * FROM users WHERE username=?", (username.lower(),)
+                )
+            ).fetchone()
+            return (self._user(row), row["password_hash"]) if row else None
+        finally:
+            await db.close()
+
+    async def update_user(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None = None,
+        password_hash: str | None = None,
+        role: UserRole | None = None,
+        active: bool | None = None,
+    ) -> UserRecord | None:
+        changes: list[str] = []
+        values: list[Any] = []
+        if display_name is not None:
+            changes.append("display_name=?")
+            values.append(display_name)
+        if password_hash is not None:
+            changes.append("password_hash=?")
+            values.append(password_hash)
+        if role is not None:
+            changes.append("role=?")
+            values.append(role.value)
+        if active is not None:
+            changes.append("active=?")
+            values.append(int(active))
+        if not changes:
+            return await self.get_user(user_id)
+        changes.append("updated_at=?")
+        values.append(utc_now().isoformat())
+        values.append(user_id)
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                cursor = await db.execute(
+                    f"UPDATE users SET {','.join(changes)} WHERE id=? AND id<>'local-operator'",
+                    values,
+                )
+                if cursor.rowcount != 1:
+                    return None
+                if active is False or password_hash is not None:
+                    await db.execute(
+                        "UPDATE sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
+                        (utc_now().isoformat(), user_id),
+                    )
+                await db.commit()
+            finally:
+                await db.close()
+        return await self.get_user(user_id)
+
+    async def count_active_admins(self) -> int:
+        db = await self._connect()
+        try:
+            row = await (
+                await db.execute(
+                    """SELECT COUNT(*) AS total FROM users
+                       WHERE id<>'local-operator' AND role='admin' AND active=1"""
+                )
+            ).fetchone()
+            return int(row["total"])
+        finally:
+            await db.close()
+
+    async def create_session(
+        self, user_id: str, token_hash: str, expires_at: datetime
+    ) -> str:
+        session_id = str(uuid.uuid4())
+        now = utc_now()
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute(
+                    "DELETE FROM sessions WHERE expires_at<=? OR revoked_at IS NOT NULL",
+                    (now.isoformat(),),
+                )
+                await db.execute(
+                    """INSERT INTO sessions(
+                         id,user_id,token_hash,expires_at,created_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (
+                        session_id,
+                        user_id,
+                        token_hash,
+                        expires_at.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+                await db.execute(
+                    "UPDATE users SET last_login_at=?,updated_at=? WHERE id=?",
+                    (now.isoformat(), now.isoformat(), user_id),
+                )
+                await db.commit()
+            finally:
+                await db.close()
+        return session_id
+
+    async def get_session_user(
+        self, token_hash: str, now: datetime
+    ) -> tuple[str, UserRecord, datetime] | None:
+        db = await self._connect()
+        try:
+            row = await (
+                await db.execute(
+                    """SELECT s.id AS session_id,s.expires_at,u.*
+                       FROM sessions s JOIN users u ON u.id=s.user_id
+                       WHERE s.token_hash=? AND s.revoked_at IS NULL
+                         AND s.expires_at>? AND u.active=1""",
+                    (token_hash, now.isoformat()),
+                )
+            ).fetchone()
+            if row is None:
+                return None
+            return row["session_id"], self._user(row), self._dt(row["expires_at"])
+        finally:
+            await db.close()
+
+    async def revoke_session(self, session_id: str) -> None:
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute(
+                    "UPDATE sessions SET revoked_at=? WHERE id=? AND revoked_at IS NULL",
+                    (utc_now().isoformat(), session_id),
+                )
+                await db.commit()
+            finally:
+                await db.close()
+
+    async def add_audit(
+        self,
+        *,
+        actor_user_id: str | None,
+        actor_username: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str | None,
+        outcome: str,
+        detail: dict[str, Any] | None = None,
+    ) -> AuditRecord:
+        event_id = str(uuid.uuid4())
+        now = utc_now()
+        safe_detail = detail or {}
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute(
+                    """INSERT INTO audit_events(
+                         id,actor_user_id,actor_username,action,resource_type,
+                         resource_id,outcome,detail_json,created_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (
+                        event_id,
+                        actor_user_id,
+                        actor_username,
+                        action,
+                        resource_type,
+                        resource_id,
+                        outcome,
+                        self._json(safe_detail),
+                        now.isoformat(),
+                    ),
+                )
+                await db.commit()
+            finally:
+                await db.close()
+        return AuditRecord(
+            id=event_id,
+            actor_user_id=actor_user_id,
+            actor_username=actor_username,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            outcome=outcome,
+            detail=safe_detail,
+            created_at=now,
+        )
+
+    async def list_audit(self, limit: int = 200) -> list[AuditRecord]:
+        db = await self._connect()
+        try:
+            rows = await (
+                await db.execute(
+                    """SELECT * FROM audit_events
+                       ORDER BY created_at DESC,id DESC LIMIT ?""",
+                    (max(1, min(limit, 1000)),),
+                )
+            ).fetchall()
+            return [self._audit(row) for row in rows]
+        finally:
+            await db.close()
 
     async def list_flows(self) -> list[FlowRecord]:
         db = await self._connect()
@@ -188,18 +621,22 @@ class Storage:
         finally:
             await db.close()
 
-    async def create_flow(self, definition: FlowDefinition) -> FlowRecord:
+    async def create_flow(
+        self, definition: FlowDefinition, owner_id: str = "local-operator"
+    ) -> FlowRecord:
         now = utc_now()
         flow_id = str(uuid.uuid4())
         graph = definition.model_dump(mode="json")
+        visibility = graph.pop("visibility")
         async with self._write_lock:
             db = await self._connect()
             try:
                 await db.execute(
                     """INSERT INTO flows(
                          id,name,description,enabled,max_items,timeout_seconds,
-                         parameter_schema_json,graph_json,revision,created_at,updated_at
-                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                         parameter_schema_json,graph_json,owner_id,visibility,
+                         revision,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         flow_id,
                         definition.name,
@@ -209,6 +646,8 @@ class Storage:
                         definition.timeout_seconds,
                         self._json(definition.parameter_schema),
                         self._json(graph),
+                        owner_id,
+                        visibility,
                         1,
                         now.isoformat(),
                         now.isoformat(),
@@ -217,18 +656,24 @@ class Storage:
                 await db.commit()
             finally:
                 await db.close()
-        return FlowRecord(id=flow_id, revision=1, created_at=now, updated_at=now, **graph)
+        created = await self.get_flow(flow_id)
+        if created is None:
+            raise RuntimeError("flow was not persisted")
+        return created
 
     async def update_flow(
         self, flow_id: str, definition: FlowDefinition, expected_revision: int | None
     ) -> FlowRecord | None:
         now = utc_now()
         graph = definition.model_dump(mode="json")
+        visibility = graph.pop("visibility")
         async with self._write_lock:
             db = await self._connect()
             try:
                 current = await (
-                    await db.execute("SELECT revision,created_at FROM flows WHERE id=?", (flow_id,))
+                    await db.execute(
+                        "SELECT revision,created_at FROM flows WHERE id=?", (flow_id,)
+                    )
                 ).fetchone()
                 if not current:
                     return None
@@ -238,7 +683,7 @@ class Storage:
                 await db.execute(
                     """UPDATE flows SET name=?,description=?,enabled=?,max_items=?,
                          timeout_seconds=?,parameter_schema_json=?,graph_json=?,
-                         revision=?,updated_at=? WHERE id=?""",
+                         visibility=?,revision=?,updated_at=? WHERE id=?""",
                     (
                         definition.name,
                         definition.description,
@@ -247,6 +692,7 @@ class Storage:
                         definition.timeout_seconds,
                         self._json(definition.parameter_schema),
                         self._json(graph),
+                        visibility,
                         revision,
                         now.isoformat(),
                         flow_id,
@@ -256,13 +702,7 @@ class Storage:
                 created_at = self._dt(current["created_at"])
             finally:
                 await db.close()
-        return FlowRecord(
-            id=flow_id,
-            revision=revision,
-            created_at=created_at,
-            updated_at=now,
-            **graph,
-        )
+        return await self.get_flow(flow_id)
 
     async def delete_flow(self, flow_id: str) -> bool:
         async with self._write_lock:
@@ -295,7 +735,13 @@ class Storage:
             await db.close()
 
     async def create_schedule(
-        self, definition: ScheduleDefinition, next_run_at: datetime | None
+        self,
+        definition: ScheduleDefinition,
+        next_run_at: datetime | None,
+        *,
+        owner_id: str = "local-operator",
+        visibility: FlowVisibility = FlowVisibility.TEAM,
+        created_by: str = "local-operator",
     ) -> ScheduleRecord:
         now = utc_now()
         schedule_id = str(uuid.uuid4())
@@ -305,8 +751,9 @@ class Storage:
                 await db.execute(
                     """INSERT INTO schedules(
                          id,flow_id,name,cron,timezone,enabled,parameters_json,
-                         next_run_at,revision,created_at,updated_at
-                       ) VALUES(?,?,?,?,?,?,?,?,1,?,?)""",
+                         owner_id,visibility,created_by,next_run_at,revision,
+                         created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
                     (
                         schedule_id,
                         definition.flow_id,
@@ -315,6 +762,9 @@ class Storage:
                         definition.timezone,
                         int(definition.enabled),
                         self._json(definition.parameters),
+                        owner_id,
+                        visibility.value,
+                        created_by,
                         next_run_at.isoformat() if next_run_at else None,
                         now.isoformat(),
                         now.isoformat(),
@@ -334,6 +784,9 @@ class Storage:
         definition: ScheduleDefinition,
         expected_revision: int | None,
         next_run_at: datetime | None,
+        *,
+        owner_id: str | None = None,
+        visibility: FlowVisibility | None = None,
     ) -> ScheduleRecord | None:
         now = utc_now()
         async with self._write_lock:
@@ -352,6 +805,8 @@ class Storage:
                 await db.execute(
                     """UPDATE schedules SET flow_id=?,name=?,cron=?,timezone=?,
                          enabled=?,parameters_json=?,next_run_at=?,revision=?,
+                         owner_id=COALESCE(?,owner_id),
+                         visibility=COALESCE(?,visibility),
                          lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=?""",
                     (
                         definition.flow_id,
@@ -362,6 +817,8 @@ class Storage:
                         self._json(definition.parameters),
                         next_run_at.isoformat() if next_run_at else None,
                         revision,
+                        owner_id,
+                        visibility.value if visibility else None,
                         now.isoformat(),
                         schedule_id,
                     ),
@@ -493,6 +950,7 @@ class Storage:
         flow: FlowRecord,
         parameters: dict[str, Any],
         idempotency_key: str | None,
+        created_by: str = "local-operator",
     ) -> tuple[RunRecord, bool]:
         now = utc_now()
         async with self._write_lock:
@@ -511,8 +969,9 @@ class Storage:
                 await db.execute(
                     """INSERT INTO runs(
                          id,flow_id,flow_name,flow_revision,flow_snapshot_json,
-                         status,parameters_json,idempotency_key,processed_items,created_at
-                       ) VALUES(?,?,?,?,?,?,?,?,0,?)""",
+                         owner_id,visibility,created_by,status,parameters_json,
+                         idempotency_key,processed_items,created_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,0,?)""",
                     (
                         run_id,
                         flow.id,
@@ -521,9 +980,18 @@ class Storage:
                         self._json(
                             flow.model_dump(
                                 mode="json",
-                                exclude={"id", "revision", "created_at", "updated_at"},
+                                exclude={
+                                    "id",
+                                    "owner_id",
+                                    "revision",
+                                    "created_at",
+                                    "updated_at",
+                                },
                             )
                         ),
+                        flow.owner_id,
+                        flow.visibility.value,
+                        created_by,
                         RunStatus.QUEUED.value,
                         self._json(parameters),
                         idempotency_key,
@@ -563,7 +1031,7 @@ class Storage:
         try:
             row = await (
                 await db.execute(
-                    """SELECT flow_id,flow_revision,flow_snapshot_json,created_at
+                    """SELECT flow_id,flow_revision,flow_snapshot_json,owner_id,created_at
                        FROM runs WHERE id=?""",
                     (run_id,),
                 )
@@ -574,6 +1042,7 @@ class Storage:
             created_at = self._dt(row["created_at"])
             return FlowRecord(
                 id=row["flow_id"],
+                owner_id=row["owner_id"],
                 revision=int(row["flow_revision"] or 1),
                 created_at=created_at,
                 updated_at=created_at,
@@ -592,7 +1061,7 @@ class Storage:
             flow_revision=flow.revision,
             definition=FlowDefinition.model_validate(
                 flow.model_dump(
-                    exclude={"id", "revision", "created_at", "updated_at"}
+                    exclude={"id", "owner_id", "revision", "created_at", "updated_at"}
                 )
             ),
         )
@@ -1061,6 +1530,8 @@ class Storage:
         graph = json.loads(row["graph_json"])
         return FlowRecord(
             id=row["id"],
+            owner_id=row["owner_id"],
+            visibility=FlowVisibility(row["visibility"]),
             revision=row["revision"],
             created_at=self._dt(row["created_at"]),
             updated_at=self._dt(row["updated_at"]),
@@ -1073,6 +1544,9 @@ class Storage:
             flow_id=row["flow_id"],
             flow_name=row["flow_name"],
             flow_revision=int(row["flow_revision"] or 1),
+            owner_id=row["owner_id"],
+            visibility=FlowVisibility(row["visibility"]),
+            created_by=row["created_by"],
             status=RunStatus(row["status"]),
             parameters=json.loads(row["parameters_json"]),
             idempotency_key=row["idempotency_key"],
@@ -1116,6 +1590,9 @@ class Storage:
     def _schedule(self, row: aiosqlite.Row) -> ScheduleRecord:
         return ScheduleRecord(
             id=row["id"],
+            owner_id=row["owner_id"],
+            visibility=FlowVisibility(row["visibility"]),
+            created_by=row["created_by"],
             flow_id=row["flow_id"],
             name=row["name"],
             cron=row["cron"],
@@ -1129,6 +1606,31 @@ class Storage:
             last_error=row["last_error"],
             created_at=self._dt(row["created_at"]),
             updated_at=self._dt(row["updated_at"]),
+        )
+
+    def _user(self, row: aiosqlite.Row) -> UserRecord:
+        return UserRecord(
+            id=row["id"],
+            username=row["username"],
+            display_name=row["display_name"],
+            role=UserRole(row["role"]),
+            active=bool(row["active"]),
+            created_at=self._dt(row["created_at"]),
+            updated_at=self._dt(row["updated_at"]),
+            last_login_at=self._dt(row["last_login_at"]),
+        )
+
+    def _audit(self, row: aiosqlite.Row) -> AuditRecord:
+        return AuditRecord(
+            id=row["id"],
+            actor_user_id=row["actor_user_id"],
+            actor_username=row["actor_username"],
+            action=row["action"],
+            resource_type=row["resource_type"],
+            resource_id=row["resource_id"],
+            outcome=row["outcome"],
+            detail=json.loads(row["detail_json"]),
+            created_at=self._dt(row["created_at"]),
         )
 
 

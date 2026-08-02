@@ -1,104 +1,130 @@
-# Control Room
+# Lane Studio Control Room
 
-This surface brief documents the shipped Siftlane Cloud Blue Console control room. It overrides the generated dark baseline in `../siftlane/MASTER.md`; the root `DESIGN.md` and this file are authoritative for this surface.
+This surface brief documents the shipped SiftLane Lane Studio workspace. It replaces the former Cloud Blue Console direction. The root `DESIGN.md` is the normative token source and this file owns composition, view-state, and interaction decisions for the control room.
 
 ## Mode
 
-**Operate.** Users repeatedly select a flow, inspect or edit its declared DAG, run it, follow live activity, and inspect durable results and events.
+**Operate**, with a focused **Read** state for captured article detail. Users build and run declared crawler workflows, inspect live evidence, scan normalized results, and then read the complete captured item without leaving the studio.
 
 ## Direction Contract
 
-- **THESIS:** The live execution path is the workspace. The surface refuses a dashboard made from detached metric cards.
-- **OWN-WORLD:** Cloud-blue actions, cool-white rails, a pale-blue graph field, compact square controls, and independent semantic status colors establish Siftlane's own visual world.
-- **STORY:** Operators select a flow, edit its inspectable DAG, run it, follow two live lines, then inspect the durable event and item record.
-- **FIRST VIEWPORT:** A narrow flow rail, full-scale workflow canvas, and contextual inspector share one continuous control room beneath engine health. On mobile, explicit edge controls replace the rails while the graph and live activity remain visible.
-- **FORM:** User-locked Cloud Blue Console from approved prototype D, seed key `PROTOTYPE-D-20260731`.
+- **THESIS:** The crawler lane and its evidence are one continuous workbench. The product refuses detached dashboard cards and transient item-detail overlays.
+- **OWN-WORLD:** A full-viewport white studio, quiet neutral rails, Lane Blue actions, colored node-role tiles, and editorial result detail establish SiftLane's visual identity.
+- **STORY:** Select a flow, inspect or edit the declared DAG, run it, follow live activity, scan results, then switch the center surface to complete article detail and return to the originating row.
+- **FIRST VIEWPORT:** Desktop shows the utility rail, flow library, central graph or evidence surface, inspector, engine state, and live event dock together. Mobile retains only the context needed for the current task and moves secondary rails behind explicit controls.
+- **FORM:** User-approved Lane Studio interpretation of the supplied reference, seed key `a31d7c33`.
 
 ## Shipped Composition
 
 ### Desktop
 
-- A 60px top bar and 62px engine/status strip span the full shell.
-- The main work area uses a 232px flow rail, flexible workflow canvas, and 320px node inspector.
-- The center view uses a 46px tab/action bar, flexible graph or data view, and 108px event dock.
-- The dotted Graph Mist canvas is the dominant region. Nodes remain fixed at 188x104px and carry visible handles and edge state.
-- Results and run history replace only the center view. Flow selection, engine status, actions, inspector, and live dock stay in place.
+- The application fills the browser viewport without an outer margin and uses a 62px top bar plus a 44px engine/status strip.
+- Four columns organize the working area: 64px utility rail, 248px flow rail, flexible center with a 580px minimum, and 316px inspector.
+- The center stacks a 52px workspace bar, a flexible graph/results/detail view, and a 96px live event dock.
+- The utility rail provides stable icon access to primary product areas. The flow rail carries search, flows, recent runs, and local-network status.
+- Workflow nodes are fixed at 196x110px. Their bodies remain neutral while node-role icon tiles use restrained green, blue, coral, sun, mint, and violet families.
 
-### Mobile
+### Responsive
 
-- At 900px and below, the flow rail becomes a left drawer and the inspector becomes a right drawer; breadcrumbs, desktop-only actions, counters, and the minimap collapse.
-- At 560px and below, the shell uses 54px top and status rows, a 44px workspace bar, and a 94px live dock.
-- Familiar command icons replace labels where width is constrained. Every icon control keeps an accessible name or tooltip.
-- The graph remains full scale and pannable. The viewport may show only the currently relevant middle nodes; it does not shrink the workflow into unreadable miniatures.
-- Live activity retains two message lines while timestamps and event types defer to the expanded ledger.
+- At 1280px, the columns compact to 60px, 220px, flexible center, and 288px inspector.
+- At 960px and below, the flow rail and inspector become explicit edge panels. The 60px utility rail remains visible until the mobile breakpoint.
+- At 680px and below, the utility rail disappears. The app remains a one-column full-viewport shell, and top-level actions collapse to symbols.
+- In mobile detail mode, top and status rows compress, the workspace tab row disappears, the article receives the flexible center, and every detail command is at least 44px.
 
 ## View States
 
-### Edit
+### Workflow
 
-The graph title anchors the upper-left of the canvas. The flow runs horizontally through compact rectangular nodes; selected or running nodes use a 2px Console Blue boundary, completed paths and written states use Execution Green, and failed nodes use Failure Red. The right inspector exposes schema-backed fields, a written policy note, recent run summary, and the destructive delete action.
+The graph owns the central workspace. A flow runs horizontally through role-colored nodes with visible handles and readable state labels. Selected and running nodes use a 2px Lane Blue boundary and active lift. Completed and failed states use independent green and coral treatments.
 
 ### Results
 
-The Results tab swaps the canvas for a scrollable table with a sticky header and 760px content minimum. Long URLs, descriptions, and identifiers truncate inside stable columns. The inspector and event dock remain visible so output stays connected to its configuration and run evidence.
+The Results tab replaces the graph with a scrollable 7px framed table. The sticky header remains 40px high and result rows remain 52px high regardless of content. Long values truncate in their cells. Pointer activation, Enter, or Space opens the selected item.
+
+### Item Detail
+
+Item detail is an independent center panel, never a drawer or dialog. Its sticky toolbar provides return, previous, next, and original-source actions. The document column uses the reading serif for title and body; the adjacent facts column exposes source, author, original publication time, capture time, media type, content length, external ID, and complete metadata.
+
+Opening detail moves keyboard focus to its title. Escape returns to Results, left and right arrows navigate adjacent items, and returning restores focus to the originating result row. On small screens the facts column follows the article body so reading width remains stable.
 
 ### Live Activity And Ledger
 
-The persistent event dock exposes no more than the two latest lines. Its complete ordered ledger opens upward from the dock, up to 340px high, without changing shell geometry or moving the user's graph position. Desktop rows preserve sequence, message, event type, and time; mobile drops the type column first.
+The persistent event dock retains the two latest evidence lines and current connection state. The complete ordered ledger opens upward from that dock without moving the user's canvas, result list, or article position.
+
+## Data Collection Journey
+
+The shipped crawl path is observable end to end:
+
+1. A listing request retrieves a news index or hotspot page.
+2. HTML extraction produces article titles and relative or absolute links.
+3. Relative links are resolved against the listing URL.
+4. A loop requests each article detail page.
+5. Detail extraction merges matching body elements and extracts author and publication time.
+6. Emit writes normalized items with article URL, full content, provenance, and nested metadata.
+7. Results expose the normalized rows; item detail exposes the complete captured record.
+
+JSON and JSONP sources may enter through the equivalent JSON extraction path. Metadata templates may use nested structures, and emitted values remain inspectable in the detail facts panel.
 
 ## Surface Tokens
 
-Use the root `DESIGN.md` frontmatter as the normative token source. The shipped values that most strongly shape this surface are:
+Use the root `DESIGN.md` frontmatter as the normative token source. The values that most strongly shape this surface are:
 
 ```css
---brand: #0052d9;
---brand-hover: #003eb3;
---brand-soft: #e8f2ff;
---canvas: #f5f9fd;
+--brand: #3568c8;
+--brand-hover: #28539f;
+--brand-soft: #edf3ff;
+--canvas: #f7f9fc;
 --surface: #ffffff;
---text: #1b2b42;
---muted: #60748b;
---line: #dce4ec;
---line-strong: #bac7d5;
---success: #007a52;
---warning: #c45f18;
---danger: #c93535;
+--surface-subtle: #f6f8fa;
+--text: #202124;
+--muted: #667085;
+--line: #e2e6eb;
+--line-strong: #c9d0d9;
+--success: #2f7a44;
+--warning: #ad6516;
+--danger: #be4c45;
+--accent-sun: #f0cc68;
+--accent-coral: #eaa39d;
+--accent-mint: #78bf95;
 ```
 
-## Interaction And Accessibility
+## Motion And Accessibility
 
-- Primary, secondary, icon, tab, node, row, drawer, and disclosure controls all have visible hover or selected states.
-- Keyboard focus uses a 2px Console Blue outline with a 2px offset; schema fields use the same blue border plus a restrained halo.
-- Disabled controls retain geometry and reduce opacity to 48%.
-- Semantic states combine color with labels, event text, or icons.
-- The two-line activity region is a polite live region; the ordered ledger remains available on demand.
-- Drawer motion is 220ms with `cubic-bezier(.2,.8,.2,1)` and state transitions are 160ms ease. `prefers-reduced-motion` reduces animation and transition duration to 0.01ms.
-- The shell starts at a 320px minimum width and avoids document-level horizontal or vertical scrolling.
+- Canvas, result, detail, and empty-state views enter with a bounded 320ms surface transition using `cubic-bezier(.16, 1, .3, 1)`.
+- Engine health uses a slow 2.6s breathing cue. Reduced-motion preference removes all view and health animation.
+- Primary, secondary, icon, tab, node, row, edge-panel, and disclosure controls expose visible hover, selected, and keyboard-focus states.
+- All icon commands use Lucide icons and carry an accessible name or native tooltip.
+- Semantic states combine color with text, icons, or both.
+- Result rows are keyboard targets, detail headings receive programmatic focus, and the list-to-detail-to-list sequence preserves keyboard continuity.
+- Mobile detail commands meet the 44px minimum touch target.
 
 ## Product Boundary
 
 - The visible node vocabulary is `start`, `http_request`, `html_extract`, `json_extract`, `condition`, `loop`, `pagination`, `transform`, and `emit`.
-- The UI may show the shipped connector surface and real engine evidence, but it must not present browser automation, authenticated platform adapters, or arbitrary Python/JavaScript execution as available.
-- Do not invent production metrics, certified connectors, customer proof, or platform capability states.
-- Do not import or mimic SubtleSight components, tokens, navigation, wordmark, dark shell, AI-assistant styling, or document-editor patterns.
+- The UI presents only local engine evidence and implemented connectors. It does not imply browser automation, authenticated platform adapters, or arbitrary Python/JavaScript execution.
+- Detail values come from the normalized emitted item; absent author or source values use an honest fallback.
+- No production metrics, certified connector claims, customer proof, cloud deployment state, or Docker requirement belongs in this local-only surface.
 
 ## Guardrails
 
-- Keep the graph as the largest and clearest working region.
-- Keep live activity to two persistent lines and disclose full history upward from its dock.
-- Keep controls compact, rectangular, and aligned to fixed dimensions.
-- Preserve semantic green, amber, and red; do not make every state blue.
-- Do not add generic dashboard cards, oversized metrics, decorative gradients, glass effects, nested cards, or marketing composition.
-- Keep node, event, result, and inspector content readable at 1440x900 and 390x844 without document-level scrolling.
+- Keep the active workflow or evidence view as the largest working region.
+- Keep item detail as a center-view replacement, never a transient overlay.
+- Keep controls, nodes, table rows, and dock regions dimensionally stable.
+- Preserve role accents and semantic green, amber, and coral instead of making every state blue.
+- Avoid bento cards, nested cards, oversized metrics, marketing composition, decorative gradients, glass effects, and text pills.
+- Keep the interface readable at 1440x900 and 390x844 without document-level scrolling or overlapping controls.
 
 ## Finish Review
 
 **Disposition: PASS**
 
-- **THESIS: RESOLVED.** The workflow graph, not a metric-card dashboard, owns the dominant area in edit state; results remain connected to the same operational shell.
-- **OWN-WORLD: RESOLVED.** The Siftlane lane mark, Console Blue, Graph Mist, cool-white rails, square controls, and semantic execution states form a coherent independent identity.
-- **STORY: RESOLVED.** Flow selection, declared graph editing, run action, two-line live activity, results, and the durable ordered event ledger are all present in one observable sequence.
-- **FIRST VIEWPORT: RESOLVED.** Desktop shows flow context, engine health, full-scale graph, inspector, and live evidence together. Mobile preserves brand, engine state, graph, run controls, and live activity while moving side context behind explicit controls.
-- **FORM: RESOLVED.** The shipped implementation matches the user-locked Cloud Blue Console direction from prototype D without drifting toward the generated dark baseline.
+- **THESIS: RESOLVED.** Workflow, result evidence, and complete item detail occupy the same center workspace and preserve surrounding context.
+- **OWN-WORLD: RESOLVED.** The full-viewport studio, functional rail, colored node roles, restrained palette, and editorial detail state form a coherent SiftLane identity.
+- **STORY: RESOLVED.** Listing extraction, link resolution, detail requests, full-content extraction, normalized output, result scanning, and detail reading form one visible workflow.
+- **FIRST VIEWPORT: RESOLVED.** Desktop preserves the full operating context. Mobile prioritizes reading and commands while collapsing secondary rails.
+- **FORM: RESOLVED.** The implementation follows the approved Lane Studio direction and the supplied reference without reverting to the old console visual world.
+- **KEYBOARD: RESOLVED.** Detail focus, Escape return, arrow navigation, and row focus restoration complete the result-detail interaction.
+- **MOBILE: RESOLVED.** Detail mode gives the reading surface most of the viewport and expands primary commands to 44px.
+- **CONTRAST: RESOLVED.** Secondary labels and evidence text use the final Measured Gray token against white and quiet surfaces.
 
-Evidence: `outputs/p1-desktop.png`, `outputs/p1-desktop-results.png`, `outputs/p1-mobile.png`, `outputs/p2-branch-retry.png`, and `outputs/p2-scheduler.png`.
+Evidence: `outputs/item-detail-desktop.png`, `outputs/item-detail-mobile.png`, plus the existing P1-P5 workflow and operations captures in `outputs/`.

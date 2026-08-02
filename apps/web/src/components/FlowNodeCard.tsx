@@ -74,7 +74,7 @@ export function FlowNodeCard({ data, selected }: NodeProps) {
   const node = typed.record;
   const Icon = icons[node.type];
   return (
-    <article className={`flow-node state-${typed.executionState} ${selected ? "selected" : ""}`}>
+    <article className={`flow-node state-${typed.executionState} ${selected ? "selected" : ""}`} data-node-type={node.type}>
       {node.type !== "start" && <Handle type="target" position={Position.Left} />}
       <div className="flow-node__head">
         <span><i><Icon size={13} /></i>{labels[node.type]}</span>

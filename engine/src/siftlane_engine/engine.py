@@ -253,14 +253,78 @@ class FlowEngine:
             for name, value in raw_headers.items()
         }
         respect_robots = bool(node.config.get("respect_robots", True))
+        continue_on_error = bool(node.config.get("continue_on_error", False))
+        fallback_to_http = bool(node.config.get("fallback_to_http", False))
+        force_http = bool(node.config.get("force_http", False))
+        request_timeout = float(node.config.get("timeout_seconds", 0)) or None
         for item in inputs[: context.flow.max_items]:
             self._check_cancelled(context)
             url = self._template(url_template, item)
-            response = await context.http.fetch(
-                url, headers=headers, respect_robots=respect_robots
-            )
-            if response.status < 200 or response.status >= 300:
-                raise HttpStatusError(response.status, url)
+            if force_http:
+                url = self._http_fallback_url(url) or url
+            response = None
+            error: Exception | None = None
+            attempt_limit = node.retry.max_attempts if continue_on_error else 1
+            for attempt in range(1, attempt_limit + 1):
+                try:
+                    response = await self._fetch_with_fallback(
+                        node,
+                        context,
+                        url,
+                        headers=headers,
+                        respect_robots=respect_robots,
+                        fallback_to_http=fallback_to_http,
+                        timeout_seconds=request_timeout,
+                    )
+                    error = None
+                    break
+                except Exception as attempt_error:
+                    error = attempt_error
+                    should_retry = (
+                        attempt < attempt_limit and self._should_retry(error, node)
+                    )
+                    if not should_retry:
+                        break
+                    delay = min(
+                        node.retry.backoff_seconds * (2 ** (attempt - 1)),
+                        node.retry.max_backoff_seconds,
+                    )
+                    await context.event(
+                        "request.retrying",
+                        "warning",
+                        f"Retrying failed request: {url}",
+                        {
+                            "nodeId": node.id,
+                            "url": url,
+                            "attempt": attempt,
+                            "nextAttempt": attempt + 1,
+                            "delaySeconds": delay,
+                            "errorType": type(error).__name__,
+                            "error": str(error)[:500],
+                        },
+                    )
+                    if delay:
+                        try:
+                            await asyncio.wait_for(context.cancelled.wait(), timeout=delay)
+                        except asyncio.TimeoutError:
+                            pass
+                        self._check_cancelled(context)
+            if response is None:
+                if not continue_on_error and error is not None:
+                    raise error
+                await context.event(
+                    "request.skipped",
+                    "warning",
+                    f"Skipped failed request: {url}",
+                    {
+                        "nodeId": node.id,
+                        "url": url,
+                        "attempts": attempt_limit,
+                        "errorType": type(error).__name__ if error else "UnknownError",
+                        "error": str(error)[:500] if error else "unknown request error",
+                    },
+                )
+                continue
             result.append(
                 {
                     **item,
@@ -273,6 +337,73 @@ class FlowEngine:
             )
         return result
 
+    async def _fetch_with_fallback(
+        self,
+        node: FlowNode,
+        context: ExecutionContext,
+        url: str,
+        *,
+        headers: dict[str, str],
+        respect_robots: bool,
+        fallback_to_http: bool,
+        timeout_seconds: float | None,
+    ):
+        try:
+            return await self._fetch_response(
+                context,
+                url,
+                headers=headers,
+                respect_robots=respect_robots,
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception as primary_error:
+            fallback_url = self._http_fallback_url(url) if fallback_to_http else None
+            if fallback_url is None:
+                raise
+            try:
+                response = await self._fetch_response(
+                    context,
+                    fallback_url,
+                    headers=headers,
+                    respect_robots=respect_robots,
+                    timeout_seconds=timeout_seconds,
+                )
+            except Exception as fallback_error:
+                raise fallback_error from primary_error
+            await context.event(
+                "request.fallback",
+                "warning",
+                f"Retried request over HTTP: {fallback_url}",
+                {"nodeId": node.id, "url": url, "fallbackUrl": fallback_url},
+            )
+            return response
+
+    @staticmethod
+    async def _fetch_response(
+        context: ExecutionContext,
+        url: str,
+        *,
+        headers: dict[str, str],
+        respect_robots: bool,
+        timeout_seconds: float | None = None,
+    ):
+        fetch = context.http.fetch(url, headers=headers, respect_robots=respect_robots)
+        response = (
+            await asyncio.wait_for(fetch, timeout=timeout_seconds)
+            if timeout_seconds is not None
+            else await fetch
+        )
+        if response.status < 200 or response.status >= 300:
+            raise HttpStatusError(response.status, url)
+        return response
+
+    @staticmethod
+    def _http_fallback_url(url: str) -> str | None:
+        parsed = urlsplit(url)
+        if parsed.scheme.lower() != "https":
+            return None
+        return urlunsplit(("http", parsed.netloc, parsed.path, parsed.query, parsed.fragment))
+
     def _html_extract(
         self,
         node: FlowNode,
@@ -282,6 +413,8 @@ class FlowEngine:
         result: list[dict[str, Any]] = []
         selector = str(node.config.get("item_selector", "")).strip()
         fields = node.config.get("fields", {})
+        deduplicate_by = str(node.config.get("deduplicate_by", "")).strip()
+        seen: set[str] = set()
         if not isinstance(fields, dict) or not fields:
             raise ValueError("html_extract requires a non-empty fields object")
         for item in inputs:
@@ -297,6 +430,12 @@ class FlowEngine:
                         )
                 extracted.pop("body", None)
                 extracted.pop("response_headers", None)
+                if deduplicate_by:
+                    dedupe_value = str(self._path(extracted, deduplicate_by) or "")
+                    if dedupe_value and dedupe_value in seen:
+                        continue
+                    if dedupe_value:
+                        seen.add(dedupe_value)
                 result.append(extracted)
                 if len(result) >= context.flow.max_items:
                     return result
@@ -311,10 +450,12 @@ class FlowEngine:
         result: list[dict[str, Any]] = []
         items_path = str(node.config.get("items_path", "")).strip()
         fields = node.config.get("fields", {})
+        deduplicate_by = str(node.config.get("deduplicate_by", "")).strip()
+        seen: set[str] = set()
         if not isinstance(fields, dict) or not fields:
             raise ValueError("json_extract requires a non-empty fields object")
         for item in inputs:
-            payload = json.loads(str(item.get("body", "")))
+            payload = self._decode_json_payload(str(item.get("body", "")))
             candidates = self._path(payload, items_path) if items_path else payload
             if not isinstance(candidates, list):
                 candidates = [candidates]
@@ -322,10 +463,31 @@ class FlowEngine:
                 extracted = {key: value for key, value in item.items() if key != "body"}
                 for field, path in fields.items():
                     extracted[field] = self._path(candidate, str(path))
+                if deduplicate_by:
+                    dedupe_value = str(self._path(extracted, deduplicate_by) or "")
+                    if dedupe_value and dedupe_value in seen:
+                        continue
+                    if dedupe_value:
+                        seen.add(dedupe_value)
                 result.append(extracted)
                 if len(result) >= context.flow.max_items:
                     return result
         return result
+
+    @staticmethod
+    def _decode_json_payload(body: str) -> Any:
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError as json_error:
+            match = re.fullmatch(
+                r"\s*[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*"
+                r"\s*\((.*)\)\s*;?\s*",
+                body,
+                flags=re.DOTALL,
+            )
+            if match is None:
+                raise json_error
+            return json.loads(match.group(1))
 
     def _condition(
         self, node: FlowNode, inputs: list[dict[str, Any]]
@@ -447,12 +609,13 @@ class FlowEngine:
         mapping = node.config.get("fields", {})
         if mapping and not isinstance(mapping, dict):
             raise ValueError("emit fields must be an object")
+        skip_empty_content = bool(node.config.get("skip_empty_content", False))
         emitted = 0
         existing_count = await context.storage.count_items(context.run_id)
         for item in inputs[: context.flow.max_items]:
             self._check_cancelled(context)
             values = {
-                key: self._template(value, item) if isinstance(value, str) else value
+                key: self._render_template_value(value, item)
                 for key, value in mapping.items()
             }
             url = str(values.get("url") or item.get("url") or item.get("seed_url") or "")
@@ -461,6 +624,14 @@ class FlowEngine:
                 raise ValueError("emitted item URL must be an absolute http(s) URL")
             title = str(values.get("title") or item.get("title") or url)
             content_value = values.get("content", item.get("content", ""))
+            if skip_empty_content and not content_value:
+                await context.event(
+                    "item.skipped",
+                    "warning",
+                    f"Skipped item without extracted content: {title[:120]}",
+                    {"nodeId": node.id, "url": url, "reason": "empty_content"},
+                )
+                continue
             if not content_value:
                 content_value = json.dumps(item, ensure_ascii=False, default=str)
             content = (
@@ -514,21 +685,117 @@ class FlowEngine:
     @staticmethod
     def _extract_html_field(scope: Any, specification: Any) -> str:
         if isinstance(specification, str):
-            selector, attribute, default = specification, "text", ""
+            selector, attribute, default, multiple, separator, script_variable, json_path = (
+                specification,
+                "text",
+                "",
+                False,
+                "\n\n",
+                "",
+                "",
+            )
         elif isinstance(specification, dict):
             selector = str(specification.get("selector", ""))
             attribute = str(specification.get("attribute", "text"))
             default = str(specification.get("default", ""))
+            multiple = bool(specification.get("all", False))
+            separator = str(specification.get("separator", "\n\n"))
+            script_variable = str(specification.get("script_variable", "")).strip()
+            json_path = str(specification.get("path", "")).strip()
         else:
             raise ValueError("HTML field specification must be a selector or object")
+        if script_variable:
+            embedded_html = FlowEngine._extract_script_variable(scope, script_variable)
+            if embedded_html is None:
+                return default
+            scope = BeautifulSoup(embedded_html, "html.parser")
+        if multiple:
+            targets = scope.select(selector) if selector else [scope]
+            values = [
+                FlowEngine._html_target_value(target, attribute, "", json_path)
+                for target in targets
+            ]
+            values = [value for value in values if value]
+            return separator.join(values) if values else default
         target = scope.select_one(selector) if selector else scope
         if target is None:
             return default
+        return FlowEngine._html_target_value(target, attribute, default, json_path)
+
+    @staticmethod
+    def _html_target_value(
+        target: Any, attribute: str, default: str, json_path: str = ""
+    ) -> str:
         if attribute == "text":
             return target.get_text(" ", strip=True)
         if attribute == "html":
             return target.decode_contents()
+        if attribute == "json":
+            source = target.string or target.get_text()
+            try:
+                value = FlowEngine._path(json.loads(str(source)), json_path)
+            except (json.JSONDecodeError, TypeError):
+                return default
+            if value is None:
+                return default
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, ensure_ascii=False, default=str)
+            return str(value)
         return str(target.get(attribute, default))
+
+    @staticmethod
+    def _extract_script_variable(scope: Any, variable: str) -> str | None:
+        assignment = re.compile(
+            rf"\b(?:(?:var|let|const)\s+)?{re.escape(variable)}\s*=\s*(['\"])",
+            flags=re.MULTILINE,
+        )
+        for script in scope.select("script"):
+            source = str(script.string or script.get_text() or "")
+            match = assignment.search(source)
+            if match is None:
+                continue
+            quote = match.group(1)
+            start = match.end()
+            for index in range(start, len(source)):
+                if source[index] != quote:
+                    continue
+                backslashes = 0
+                cursor = index - 1
+                while cursor >= start and source[cursor] == "\\":
+                    backslashes += 1
+                    cursor -= 1
+                if backslashes % 2 == 0:
+                    return FlowEngine._decode_javascript_string(source[start:index])
+        return None
+
+    @staticmethod
+    def _decode_javascript_string(value: str) -> str:
+        value = re.sub(
+            r"\\u([0-9a-fA-F]{4})",
+            lambda match: chr(int(match.group(1), 16)),
+            value,
+        )
+        value = re.sub(
+            r"\\x([0-9a-fA-F]{2})",
+            lambda match: chr(int(match.group(1), 16)),
+            value,
+        )
+        escapes = {
+            "\\": "\\",
+            "'": "'",
+            '"': '"',
+            "/": "/",
+            "b": "\b",
+            "f": "\f",
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+        }
+        return re.sub(
+            r"\\([\\/'\"bfnrt])",
+            lambda match: escapes[match.group(1)],
+            value,
+        )
 
     @staticmethod
     def _path(value: Any, path: str) -> Any:
@@ -554,6 +821,19 @@ class FlowEngine:
             return "" if value is None else str(value)
 
         return re.sub(r"{{\s*([^{}]+?)\s*}}", replace, template)
+
+    @classmethod
+    def _render_template_value(cls, value: Any, values: dict[str, Any]) -> Any:
+        if isinstance(value, str):
+            return cls._template(value, values)
+        if isinstance(value, dict):
+            return {
+                key: cls._render_template_value(nested, values)
+                for key, nested in value.items()
+            }
+        if isinstance(value, list):
+            return [cls._render_template_value(nested, values) for nested in value]
+        return value
 
     @staticmethod
     def _resolve_secret(value: str) -> str:

@@ -17,7 +17,8 @@ Siftlane/
 |- designs/                  Approved prototypes
 |- documentation/            Architecture, permissions, operations, and test map
 |- outputs/                  Verification screenshots and runtime logs
-|- ACCEPTANCE.md             P1/P2 promotion gates
+|- ACCEPTANCE.md             P0-P5 promotion gates and evidence
+|- PRD-SiftLane-product-lifecycle.md  P0-P5 lifecycle requirements
 |- PRD-P2-release-hardening.md  P2 release requirements and decision rules
 |- VERSION                   Release version source
 |- PRODUCT.md                Product truth and boundaries
@@ -50,11 +51,25 @@ restarts it against the same database, and verifies exact, duplicate-free output
 
 ## Phase status
 
-P2 is completed. The mandatory P1/P2 gate passes the engine suite, production Web
-build, and isolated browser acceptance tests in one command. Version `v0.2.0` was
-published by the successful protected tag workflow with all five release assets.
-See `ACCEPTANCE.md` for the criteria, evidence, and remaining repository-governance
-check.
+| Phase | Status | Milestone |
+| --- | --- | --- |
+| P0 product and engineering baseline | Completed | Retrospective baseline; no separate tag |
+| P1 single-operator core workflow | Completed | `0.1.x` functional baseline |
+| P2 reliable orchestration and release | Released | `v0.2.0` |
+| P3 secure team collaboration | Local implementation accepted; formal release blocked | `v0.3.0` local candidate |
+| P4 managed connectors and delivery | Local candidate accepted; formal release blocked | `v0.4.0` local candidate |
+| P5 production readiness and GA | GA candidate qualification | Target `v1.0.0` |
+
+The lifecycle gate passes the complete engine suite, production Web build,
+isolated P1-P5 browser acceptance, GA qualification and security checks in one
+command. Version `v0.2.0` was published by the successful tag workflow with all
+five release assets. Administrator confirmation of required Windows and Linux
+`main` checks still blocks formal P3/P4/P5 release status, not the recorded
+`v0.2.0` publication.
+
+See `PRD-SiftLane-product-lifecycle.md` for the complete phase scope, dependencies,
+entry and exit criteria, release rules, and rollback rules. See `ACCEPTANCE.md` for
+the itemized gates, evidence, current decision, and governance debt.
 
 ## Start
 

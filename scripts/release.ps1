@@ -27,7 +27,7 @@ if ($Install) {
 }
 & (Join-Path $PSScriptRoot "verify.ps1") @verifyArguments
 if ($LASTEXITCODE -ne 0) {
-    throw "P1/P2 acceptance failed with exit code $LASTEXITCODE"
+    throw "Lifecycle acceptance failed with exit code $LASTEXITCODE"
 }
 
 $packageArguments = @{

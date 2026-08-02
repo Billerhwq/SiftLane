@@ -2,105 +2,64 @@
 
 ## Release Boundary
 
-Siftlane P2 is released as three download formats on GitHub:
+Siftlane publishes a Python wheel, Python source distribution and production Web zip, plus `manifest.json` and `SHA256SUMS.txt`. It does not publish to PyPI/npm/container registries or deploy a hosted service. The Compose files are a reproducible self-hosted deployment input, not a hosted release asset.
 
-- A Python wheel for installation.
-- A Python source distribution for rebuilds.
-- A zip containing the production web files.
+## Authoritative Candidate Gate
 
-The release also includes `manifest.json` and `SHA256SUMS.txt`. P2 does not publish
-to PyPI, npm, a container registry, or a deployment environment.
-
-## Required Gate
-
-The authoritative local candidate command is:
+From the repository root:
 
 ```powershell
 .\scripts\release.ps1 -Install -BrowserChannel chrome
 ```
 
-Use `-AllowDirty` only to exercise the candidate pipeline before the changes are
-committed. A tagged release always runs from a clean Git checkout.
+Use `-AllowDirty` only to exercise a local candidate before commit. A tagged release must run from a clean reviewed `main` commit. For `v1.0.0`, the gate includes all P0-P5 engine/browser tests, the production build, 30-second capacity/backup/soak qualification, dependency and credential security audits, release metadata, package smoke tests and artifact hash/path/content audit.
 
-The command must pass all engine tests, the production web build, every P1/P2
-Playwright test, release metadata checks, package builds, and artifact smoke tests.
-It writes ignored candidate files to `release-artifacts/`.
+## Repository Governance
 
-## Repository Setup
+1. Enable GitHub Actions and allow only the release job to use `contents: write`.
+2. Protect `main`; require `P2 acceptance / acceptance` and `P2 acceptance / linux deployment` to pass on the current commit.
+3. Require reviewed, up-to-date branches and disallow routine bypass of failed/skipped checks.
+4. Record branch protection/ruleset evidence with administrator, UTC date and repository.
 
-Configure these GitHub settings before creating the first release:
-
-1. Enable GitHub Actions for the repository.
-2. Allow the repository `GITHUB_TOKEN` to create releases.
-3. Protect `main` and require the `P2 acceptance / acceptance` status check.
-4. Require the branch to be current before merging.
-5. Do not permit a failed or skipped acceptance job to be bypassed for routine merges.
-
-The workflow file makes the check available. Branch protection is an external
-repository setting and must be confirmed by an administrator.
+The workflow name retains `P2 acceptance` for compatibility with the existing required-check identity, but its implementation is the full lifecycle gate. Until the external branch-protection evidence exists, `GOV-01` blocks formal P3/P4/P5 release status.
 
 ## Candidate Procedure
 
-1. Confirm `VERSION`, Python metadata, runtime health version, Web package metadata,
-   and the intended tag all describe the same version.
-2. Update `documentation/releases/v<version>.md` with user-visible changes and any
-   required action.
-3. Run the local candidate command from the repository root.
-4. Inspect `release-artifacts/manifest.json` and verify every distributable is listed.
-5. Review and commit the complete P2 baseline through the normal PR process.
-6. Wait for `P2 acceptance` to pass on the PR and again on `main`.
+1. Confirm `VERSION`, Python metadata/runtime, Web package/lockfile, release notes and intended tag match.
+2. Review the 8-section lifecycle PRD and set only evidence-backed checklist items to passed.
+3. Run the authoritative local candidate gate and inspect all three P5 JSON reports and screenshots.
+4. Inspect `release-artifacts/manifest.json`; independently recompute every SHA-256.
+5. Commit through the normal review path and wait for both Windows lifecycle and Linux deployment jobs on the exact commit.
+6. Exercise upgrade/restore on a copy, preserve the prior artifact/hash/backup and record reviewer/date.
 
 ## Formal Release
 
-From the accepted `main` commit, create and push the matching annotated tag:
+Only after the phase entry/exit conditions and governance gates are satisfied, create the matching annotated tag from accepted `main`:
 
 ```powershell
-git tag -a v0.2.0 -m "Siftlane v0.2.0"
-git push origin v0.2.0
+git tag -a v1.0.0 -m "Siftlane v1.0.0"
+git push origin v1.0.0
 ```
 
-The tag starts the `Release` workflow. That workflow calls the complete acceptance
-workflow first. Only after it passes does the workflow rebuild, smoke-test, hash,
-and upload the artifacts to a GitHub Release.
-
-Creating or pushing the tag is a deliberate maintainer action. The local release
-scripts never commit, tag, push, deploy, or publish by themselves.
+The tag invokes the Release workflow, which reruns acceptance, packages from the tagged commit and creates the GitHub Release. Local scripts never commit, push, tag, deploy or publish. Do not create P3/P4/GA tags retroactively from one combined unreviewed commit merely to make the phase table appear complete.
 
 ## Post-Release Verification
 
-1. Confirm the GitHub Release points to the intended tag and commit.
-2. Download all five files: wheel, sdist, Web zip, manifest, and SHA-256 list.
-3. Run `Get-FileHash -Algorithm SHA256` and compare the values with
-   `SHA256SUMS.txt`.
-4. Install the wheel in an empty Python 3.11+ environment and confirm the health
-   response reports `0.2.0`.
-5. Serve the extracted Web zip and confirm it can connect to an engine on the
-   configured API URL.
-6. Record the successful workflow URL in the release review or deployment record.
+1. Confirm the Release tag and manifest point to the reviewed clean commit.
+2. Download all five assets and compare independently computed SHA-256 values.
+3. Install the wheel in an empty Python 3.11+ environment; verify version, liveness, readiness and schema 5.
+4. Serve the Web zip with the matching API origin and run login, known flow, connector list and NDJSON delivery checks.
+5. Verify migrated counts, a current backup, metrics/alerts and Linux deployment health.
+6. Record workflow/Release URLs, operator, UTC date and final promote/rollback decision.
 
 ## Stop Conditions
 
-Do not create or keep a formal release when any of these conditions is true:
-
-- A required P1/P2 or release-hardening check failed, skipped, or was bypassed.
-- The tag, package, runtime, or Web versions differ.
-- A required artifact or checksum is missing.
-- The tag does not point to the reviewed `main` commit.
-- A known breaking change is absent from the release notes.
+- Any mandatory P0-P5, security, accessibility, capacity, Linux or release check failed, skipped, bypassed or lacks required evidence.
+- `GOV-01`, phase entry conditions, reviewer approval or representative-environment observation is incomplete.
+- Versions, tag, commit, artifacts, manifest or checksums differ.
+- Migration/restore loses integrity, a high-severity issue is unaccepted, or a secret appears in API/log/audit/artifact output.
+- A breaking change or known limit is absent from release/compatibility documentation.
 
 ## Rollback
 
-If failure is found before the GitHub Release is created, leave the failed tag
-workflow as evidence, fix the issue, bump the version, and create a new tag. Do not
-move an already-pushed release tag to a different commit.
-
-If failure is found after release:
-
-1. Mark the GitHub Release as a prerelease or remove it from normal download paths.
-2. Restore the last known-good application artifacts in the deployment environment.
-3. Preserve and back up the SQLite data directory before changing engine versions.
-4. Open a corrective change that reproduces the failure and adds a regression test.
-5. Publish a new patch version; do not replace the bytes attached to `v0.2.0`.
-
-Database migrations are not part of P2. If a future release adds them, its runbook
-must define forward and backward compatibility before release.
+Before publication, leave failed workflow evidence, fix the issue and use a new version/tag; never move a pushed release tag. After publication, stop promotion, mark the Release as affected, disable the narrowest failing connector/target where possible, preserve logs/audit/data, restore the verified pre-upgrade backup with prior matching artifacts, validate readiness/counts and publish a new patch release after regression coverage. Never replace bytes attached to an existing version.

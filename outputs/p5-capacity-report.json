@@ -1,0 +1,26 @@
+{
+  "format": "siftlane.capacity/v1",
+  "profile": {
+    "runs": 120,
+    "itemsPerRun": 20,
+    "concurrency": 8
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "result": {
+    "elapsedSeconds": 37.036845,
+    "runsPerSecond": 3.24,
+    "itemsPerSecond": 64.8,
+    "databaseBytes": 1552384,
+    "completedRuns": 120,
+    "persistedItems": 2400
+  },
+  "thresholds": {
+    "maxSeconds": 75.0,
+    "maxDatabaseBytes": 67108864,
+    "zeroDataLoss": true
+  },
+  "passed": true
+}

@@ -1,0 +1,15 @@
+{
+  "name": "v0.2 compatibility fixture",
+  "description": "A stable pre-GA flow definition.",
+  "enabled": true,
+  "max_items": 25,
+  "timeout_seconds": 60,
+  "parameter_schema": {"type": "object", "additionalProperties": true},
+  "nodes": [
+    {"id": "start", "type": "start", "name": "Start", "config": {"urls": ["https://example.com"]}},
+    {"id": "emit", "type": "emit", "name": "Emit", "config": {}}
+  ],
+  "edges": [
+    {"id": "edge", "source": "start", "target": "emit"}
+  ]
+}

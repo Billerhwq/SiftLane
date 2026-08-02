@@ -1,0 +1,17 @@
+{
+  "format": "siftlane.backup-drill/v1",
+  "sourceBytes": 1552384,
+  "backupBytes": 1552384,
+  "backupSha256": "7b5483f0b96924b76a24e94310636a354b08b007ac83ceef1767d71533020514",
+  "schemaVersion": 5,
+  "counts": {
+    "flows": 1,
+    "runs": 120,
+    "items": 2400,
+    "events": 120
+  },
+  "elapsedSeconds": 0.100643,
+  "maxRtoSeconds": 60.0,
+  "integrity": "ok",
+  "passed": true
+}

@@ -7,9 +7,10 @@ interface Props {
   capability?: NodeCapability;
   onChange: (node: FlowNodeRecord) => void;
   onDelete: () => void;
+  readOnly?: boolean;
 }
 
-function JsonField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+function JsonField({ value, onChange, disabled = false }: { value: unknown; onChange: (value: unknown) => void; disabled?: boolean }) {
   const [text, setText] = useState(() => JSON.stringify(value ?? {}, null, 2));
   const [error, setError] = useState("");
 
@@ -27,6 +28,7 @@ function JsonField({ value, onChange }: { value: unknown; onChange: (value: unkn
   return (
     <>
       <textarea
+        disabled={disabled}
         className={error ? "invalid" : ""}
         value={text}
         onChange={(event) => setText(event.target.value)}
@@ -44,19 +46,21 @@ function ConfigField({
   value,
   required,
   onChange,
+  disabled = false,
 }: {
   name: string;
   schema: JsonSchema;
   value: unknown;
   required: boolean;
   onChange: (value: unknown) => void;
+  disabled?: boolean;
 }) {
   const title = schema.title ?? name.replaceAll("_", " ");
   if (schema.enum?.length) {
     return (
       <label className="field">
         <span>{title}{required ? " *" : ""}</span>
-        <select value={String(value ?? schema.default ?? "")} onChange={(event) => onChange(event.target.value)}>
+        <select disabled={disabled} value={String(value ?? schema.default ?? "")} onChange={(event) => onChange(event.target.value)}>
           {schema.enum.map((option) => <option key={String(option)} value={String(option)}>{String(option)}</option>)}
         </select>
       </label>
@@ -66,7 +70,7 @@ function ConfigField({
     return (
       <label className="switch-field">
         <span>{title}{required ? " *" : ""}</span>
-        <input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />
+        <input disabled={disabled} type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />
         <i aria-hidden="true" />
       </label>
     );
@@ -77,6 +81,7 @@ function ConfigField({
       <label className="field">
         <span>{title}{required ? " *" : ""}</span>
         <textarea
+          disabled={disabled}
           value={Array.isArray(value) ? value.join("\n") : ""}
           onChange={(event) => onChange(event.target.value.split(separator).map((item) => item.trim()).filter(Boolean).map((item) => schema.items?.type === "integer" || schema.items?.type === "number" ? Number(item) : item))}
           placeholder="每行一项"
@@ -89,6 +94,7 @@ function ConfigField({
       <label className="field">
         <span>{title}{required ? " *" : ""}</span>
         <input
+          disabled={disabled}
           type="number"
           min={schema.minimum}
           max={schema.maximum}
@@ -103,7 +109,7 @@ function ConfigField({
     return (
       <label className="field">
         <span>{title}{required ? " *" : ""}</span>
-        <JsonField value={value} onChange={onChange} />
+        <JsonField value={value} onChange={onChange} disabled={disabled} />
       </label>
     );
   }
@@ -111,6 +117,7 @@ function ConfigField({
     <label className="field">
       <span>{title}{required ? " *" : ""}</span>
       <input
+        disabled={disabled}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
         placeholder={schema.description}
@@ -119,7 +126,7 @@ function ConfigField({
   );
 }
 
-export function NodeInspector({ node, capability, onChange, onDelete }: Props) {
+export function NodeInspector({ node, capability, onChange, onDelete, readOnly = false }: Props) {
   const properties = capability?.config_schema.properties ?? {};
   const required = new Set(capability?.config_schema.required ?? []);
   const retryProperties = capability?.retry_schema.properties ?? {};
@@ -141,7 +148,7 @@ export function NodeInspector({ node, capability, onChange, onDelete }: Props) {
         <div className="section-heading"><strong>基本信息</strong></div>
         <label className="field">
           <span>节点名称</span>
-          <input value={node.name} onChange={(event) => onChange({ ...node, name: event.target.value })} />
+          <input disabled={readOnly} value={node.name} onChange={(event) => onChange({ ...node, name: event.target.value })} />
         </label>
         <label className="field">
           <span>节点 ID</span>
@@ -160,6 +167,7 @@ export function NodeInspector({ node, capability, onChange, onDelete }: Props) {
             schema={schema}
             value={retry[name as keyof typeof retry]}
             required={retryRequired.has(name)}
+            disabled={readOnly}
             onChange={(value) => onChange({ ...node, retry: { ...retry, [name]: value } })}
           />
         ))}
@@ -176,13 +184,14 @@ export function NodeInspector({ node, capability, onChange, onDelete }: Props) {
             schema={schema}
             value={node.config[name]}
             required={required.has(name)}
+            disabled={readOnly}
             onChange={(value) => onChange({ ...node, config: { ...node.config, [name]: value } })}
           />
         ))}
         {!Object.keys(properties).length && <p className="quiet-empty">此节点无需额外配置</p>}
       </section>
       <p className="policy-note"><AlertTriangle size={14} />配置遵循 JSON Schema，节点不执行任意 Python 或 JavaScript。</p>
-      <button className="danger-button" type="button" onClick={onDelete}><Trash2 size={14} />删除节点</button>
+      <button className="danger-button" type="button" disabled={readOnly} onClick={onDelete}><Trash2 size={14} />删除节点</button>
     </aside>
   );
 }

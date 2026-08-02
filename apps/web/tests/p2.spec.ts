@@ -2,20 +2,18 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { openControlRoom } from "./helpers";
+import { apiAuthorization, openControlRoom } from "./helpers";
 
 const engine = "http://127.0.0.1:8090";
 const output = fileURLToPath(new URL("../../../outputs/", import.meta.url));
 mkdirSync(output, { recursive: true });
 
-test.afterEach(async ({ page }) => {
-  if (!page.isClosed()) await page.close({ runBeforeUnload: false });
-});
-
 test("P2 branch, retry inspector and scheduler close the UI loop", async ({ page, request }) => {
   const suffix = Date.now().toString().slice(-6);
   const flowName = `P2 branch ${suffix}`;
+  const headers = await apiAuthorization(request);
   const flowResponse = await request.post(`${engine}/api/v1/flows`, {
+    headers,
     data: {
       name: flowName,
       max_items: 10,

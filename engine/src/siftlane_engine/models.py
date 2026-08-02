@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import croniter
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 
 def utc_now() -> datetime:
@@ -51,6 +51,10 @@ NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
                 "additionalProperties": {"type": "string", "maxLength": 8192},
             },
             "respect_robots": {"type": "boolean"},
+            "continue_on_error": {"type": "boolean"},
+            "fallback_to_http": {"type": "boolean"},
+            "force_http": {"type": "boolean"},
+            "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 120},
         },
         "additionalProperties": False,
     },
@@ -63,6 +67,7 @@ NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
                 "minProperties": 1,
                 "maxProperties": 100,
             },
+            "deduplicate_by": {"type": "string", "minLength": 1, "maxLength": 120},
         },
         "required": ["fields"],
         "additionalProperties": False,
@@ -76,6 +81,7 @@ NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
                 "minProperties": 1,
                 "maxProperties": 100,
             },
+            "deduplicate_by": {"type": "string", "minLength": 1, "maxLength": 120},
         },
         "required": ["fields"],
         "additionalProperties": False,
@@ -131,6 +137,7 @@ NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
         "type": "object",
         "properties": {
             "fields": {"type": "object", "maxProperties": 100},
+            "skip_empty_content": {"type": "boolean"},
         },
         "additionalProperties": False,
     },
@@ -148,6 +155,219 @@ class RunStatus(StrEnum):
     @property
     def terminal(self) -> bool:
         return self in {self.SUCCEEDED, self.FAILED, self.CANCELLED}
+
+
+class UserRole(StrEnum):
+    ADMIN = "admin"
+    EDITOR = "editor"
+    VIEWER = "viewer"
+
+
+class FlowVisibility(StrEnum):
+    PRIVATE = "private"
+    TEAM = "team"
+
+
+class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(
+        min_length=3,
+        max_length=64,
+        pattern=r"^[a-z][a-z0-9_.-]+$",
+    )
+    display_name: str = Field(min_length=1, max_length=120)
+    password: SecretStr = Field(min_length=12, max_length=256)
+    role: UserRole = UserRole.VIEWER
+
+
+class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    password: SecretStr | None = Field(default=None, min_length=12, max_length=256)
+    role: UserRole | None = None
+    active: bool | None = None
+
+
+class UserRecord(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: UserRole
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: datetime | None = None
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=64)
+    password: SecretStr = Field(min_length=1, max_length=256)
+
+
+class CurrentUser(UserRecord):
+    auth_mode: str
+
+
+class AuthSessionResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    user: CurrentUser
+
+
+class AuditRecord(BaseModel):
+    id: str
+    actor_user_id: str | None
+    actor_username: str | None
+    action: str
+    resource_type: str
+    resource_id: str | None
+    outcome: str
+    detail: dict[str, Any]
+    created_at: datetime
+
+
+class ConnectorState(StrEnum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ERROR = "error"
+
+
+class ManagedConnectorRecord(BaseModel):
+    id: str
+    version: str
+    previous_version: str | None = None
+    state: ConnectorState
+    source: str
+    manifest: dict[str, Any]
+    installed_at: datetime
+    updated_at: datetime
+
+
+class ConnectorInstallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(
+        min_length=5,
+        max_length=255,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.whl$",
+    )
+    sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+
+
+class SecretScope(StrEnum):
+    CONNECTOR = "connector"
+    DELIVERY_TARGET = "delivery_target"
+
+
+class SecretCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+    scope_type: SecretScope
+    scope_id: str = Field(min_length=1, max_length=200)
+    value: SecretStr = Field(min_length=1, max_length=16_384)
+
+
+class SecretRecord(BaseModel):
+    id: str
+    name: str
+    scope_type: SecretScope
+    scope_id: str
+    owner_id: str
+    created_by: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeliveryTargetType(StrEnum):
+    WEBHOOK = "webhook"
+    NDJSON = "ndjson"
+
+
+class DeliveryAuthScheme(StrEnum):
+    NONE = "none"
+    BEARER = "bearer"
+    HMAC_SHA256 = "hmac_sha256"
+
+
+class DeliveryTargetDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=160)
+    type: DeliveryTargetType
+    visibility: FlowVisibility = FlowVisibility.TEAM
+    enabled: bool = True
+    url: str | None = Field(default=None, min_length=1, max_length=4000)
+    auth_scheme: DeliveryAuthScheme = DeliveryAuthScheme.NONE
+    secret_id: str | None = None
+    max_attempts: int = Field(default=3, ge=1, le=10)
+    backoff_seconds: float = Field(default=1.0, ge=0, le=300)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "DeliveryTargetDefinition":
+        if self.type == DeliveryTargetType.WEBHOOK and not self.url:
+            raise ValueError("webhook targets require a URL")
+        if self.type == DeliveryTargetType.NDJSON and self.url is not None:
+            raise ValueError("NDJSON targets do not accept a URL")
+        if self.auth_scheme != DeliveryAuthScheme.NONE and not self.secret_id:
+            raise ValueError("authenticated targets require a secret")
+        if self.auth_scheme == DeliveryAuthScheme.NONE and self.secret_id is not None:
+            raise ValueError("a secret requires an authentication scheme")
+        return self
+
+
+class DeliveryTargetRecord(DeliveryTargetDefinition):
+    id: str
+    owner_id: str
+    created_by: str
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeliveryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class DeliveryStatus(StrEnum):
+    QUEUED = "queued"
+    DELIVERING = "delivering"
+    RETRYING = "retrying"
+    SUCCEEDED = "succeeded"
+    DEAD_LETTER = "dead_letter"
+    CANCELLED = "cancelled"
+
+
+class DeliveryRecord(BaseModel):
+    id: str
+    target_id: str
+    run_id: str
+    idempotency_key: str
+    status: DeliveryStatus
+    attempt_count: int
+    next_attempt_at: datetime | None
+    response_status: int | None
+    error: str | None
+    artifact_path: str | None
+    payload_sha256: str | None
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    finished_at: datetime | None
 
 
 class RetryPolicy(BaseModel):
@@ -195,6 +415,7 @@ class FlowDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=1000)
     enabled: bool = True
+    visibility: FlowVisibility = FlowVisibility.TEAM
     max_items: int = Field(default=100, ge=1, le=10_000)
     timeout_seconds: int = Field(default=300, ge=5, le=3600)
     parameter_schema: dict[str, Any] = Field(
@@ -285,6 +506,7 @@ class FlowDefinition(BaseModel):
 
 class FlowRecord(FlowDefinition):
     id: str
+    owner_id: str
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -303,6 +525,9 @@ class RunRecord(BaseModel):
     flow_id: str
     flow_name: str
     flow_revision: int
+    owner_id: str
+    visibility: FlowVisibility
+    created_by: str
     status: RunStatus
     parameters: dict[str, Any]
     idempotency_key: str | None
@@ -402,6 +627,9 @@ class ScheduleDefinition(BaseModel):
 
 class ScheduleRecord(ScheduleDefinition):
     id: str
+    owner_id: str
+    visibility: FlowVisibility
+    created_by: str
     revision: int
     next_run_at: datetime | None
     last_run_at: datetime | None

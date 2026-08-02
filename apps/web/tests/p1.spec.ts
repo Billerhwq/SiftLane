@@ -17,9 +17,9 @@ test("P1 flow closes the browser-to-engine loop", async ({ page }) => {
   await expect(page.getByText("执行引擎在线")).toBeVisible();
 
   await page.getByRole("button", { name: "连接器" }).click();
-  await expect(page.getByRole("dialog", { name: "连接器" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "连接器与交付" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "连接器" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "连接器与交付" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "新建流程" }).first().click();
   await page.keyboard.press("Escape");

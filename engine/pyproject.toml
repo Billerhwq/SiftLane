@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "siftlane-engine"
-version = "0.2.0"
+version = "1.0.0"
 description = "Isolated, durable workflow crawler engine for Siftlane"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ dependencies = [
   "aiosqlite>=0.21,<1",
   "beautifulsoup4>=4.13,<5",
   "croniter>=6,<7",
+  "cryptography>=48.0.1,<49",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
   "jsonschema>=4.25,<5",
@@ -24,12 +25,14 @@ dependencies = [
 test = [
   "build>=1.2,<2",
   "hatchling>=1.27,<2",
-  "pytest>=8.4,<9",
+  "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.1,<2",
+  "pip-audit>=2.9,<3",
 ]
 
 [project.scripts]
 siftlane-engine = "siftlane_engine.main:main"
+siftlane-ops = "siftlane_engine.operations:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/siftlane_engine", "src/siftlane_connector_sdk"]

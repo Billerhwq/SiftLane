@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-02T18:00:00+08:00",
+  "title": "Design System: SiftLane Lane Studio",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Lane Blue", "canonical": "#3568c8", "tonalRamp": ["#10213f", "#18315e", "#21427f", "#2b55a3", "#3568c8", "#6f94db", "#adc4ed", "#edf3ff"] },
+      "primary-hover": { "role": "primary", "displayName": "Deep Lane Blue", "canonical": "#28539f", "tonalRamp": ["#0e1d38", "#152b52", "#1c396e", "#234889", "#28539f", "#6687c4", "#a6b9dd", "#e9effa"] },
+      "primary-soft": { "role": "primary", "displayName": "Selection Wash", "canonical": "#edf3ff", "tonalRamp": ["#111b2c", "#27364e", "#455b7b", "#7085a5", "#9dacc2", "#c6d0df", "#e1e7f0", "#f5f8ff"] },
+      "canvas": { "role": "neutral", "displayName": "Working Canvas", "canonical": "#f7f9fc", "tonalRamp": ["#1f2227", "#3b4048", "#5e6570", "#858d98", "#abb2bc", "#ccd1d8", "#e7eaee", "#f7f9fc"] },
+      "surface": { "role": "neutral", "displayName": "Paper Surface", "canonical": "#ffffff", "tonalRamp": ["#1f1f20", "#3e3e40", "#626264", "#8a8a8d", "#b2b2b5", "#d2d2d4", "#ebebec", "#ffffff"] },
+      "surface-subtle": { "role": "neutral", "displayName": "Quiet Surface", "canonical": "#f6f8fa", "tonalRamp": ["#202224", "#3c3f43", "#5e6268", "#858a91", "#abb0b6", "#ccd0d5", "#e6e8eb", "#f6f8fa"] },
+      "text": { "role": "neutral", "displayName": "Graphite Text", "canonical": "#202124", "tonalRamp": ["#161719", "#202124", "#3c3e42", "#62656b", "#8e9197", "#babcc1", "#dedfe2", "#f5f5f6"] },
+      "text-muted": { "role": "neutral", "displayName": "Measured Gray", "canonical": "#667085", "tonalRamp": ["#171a1f", "#2d333e", "#485263", "#667085", "#8d96a6", "#b6bcc6", "#dce0e5", "#f5f6f8"] },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#e2e6eb", "tonalRamp": ["#1e2023", "#393c41", "#575c63", "#7b8189", "#a1a7ae", "#c2c7cd", "#e2e6eb", "#f7f8f9"] },
+      "line-strong": { "role": "neutral", "displayName": "Control Line", "canonical": "#c9d0d9", "tonalRamp": ["#1b1e22", "#343940", "#505862", "#717b87", "#949eaa", "#b0bac5", "#c9d0d9", "#f1f3f5"] },
+      "success": { "role": "secondary", "displayName": "Completion Green", "canonical": "#2f7a44", "tonalRamp": ["#102719", "#173d26", "#205735", "#2f7a44", "#589467", "#86b493", "#b9d5c0", "#eaf6ed"] },
+      "success-soft": { "role": "secondary", "displayName": "Completion Wash", "canonical": "#eaf6ed", "tonalRamp": ["#14241a", "#2c4634", "#4b6b54", "#74907b", "#9eb7a4", "#c5d8ca", "#e0ebe3", "#f4faf5"] },
+      "warning": { "role": "secondary", "displayName": "Attention Amber", "canonical": "#ad6516", "tonalRamp": ["#321c06", "#532f08", "#78450c", "#965913", "#ad6516", "#ce9455", "#e8c59c", "#fff5df"] },
+      "warning-soft": { "role": "secondary", "displayName": "Attention Wash", "canonical": "#fff5df", "tonalRamp": ["#2b2111", "#4c3a1d", "#70562d", "#987644", "#bf9b67", "#dec18f", "#f1dfbb", "#fff8e9"] },
+      "danger": { "role": "secondary", "displayName": "Failure Coral", "canonical": "#be4c45", "tonalRamp": ["#35110f", "#58201d", "#7c2f2a", "#9f3e38", "#be4c45", "#d98580", "#ebb9b5", "#fff0ee"] },
+      "danger-soft": { "role": "secondary", "displayName": "Failure Wash", "canonical": "#fff0ee", "tonalRamp": ["#2e1917", "#50302d", "#764b47", "#9c6e69", "#c09792", "#dfbeb9", "#f2ddda", "#fff4f2"] },
+      "accent-sun": { "role": "tertiary", "displayName": "Connection Sun", "canonical": "#f0cc68", "tonalRamp": ["#2e250d", "#504016", "#745d22", "#9c7d31", "#c59f46", "#e0bd5b", "#f0d98c", "#fff6d8"] },
+      "accent-coral": { "role": "tertiary", "displayName": "Activity Coral", "canonical": "#eaa39d", "tonalRamp": ["#321a18", "#56302d", "#7b4945", "#a66661", "#ca837d", "#eaa39d", "#f4cac6", "#fff0ee"] },
+      "accent-mint": { "role": "tertiary", "displayName": "Evidence Mint", "canonical": "#78bf95", "tonalRamp": ["#10291b", "#1d4630", "#2d6548", "#43845f", "#5da578", "#78bf95", "#afd8bd", "#e8f7ed"] },
+      "accent-violet": { "role": "tertiary", "displayName": "Identity Violet", "canonical": "#4632a5", "tonalRamp": ["#160d3b", "#24155f", "#342084", "#4632a5", "#6a58be", "#9689d4", "#c6bee8", "#f0edfb"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Workspace Headline", "purpose": "Compact top-level titles inside the operating surface." },
+      "reading": { "displayName": "Captured Reading", "purpose": "Article titles and body copy in the independent detail view." },
+      "body": { "displayName": "Studio Body", "purpose": "Navigation, commands, lists, tables, and explanatory text." },
+      "label": { "displayName": "Operational Label", "purpose": "Tabs, fields, statuses, and metadata labels." },
+      "mono": { "displayName": "Inspectable Value", "purpose": "IDs, URLs, timestamps, selectors, and serialized metadata." }
+    },
+    "shadows": [
+      { "name": "node-rest", "value": "0 7px 20px rgba(51, 67, 88, .1)", "purpose": "Gives workflow nodes a light work-surface lift." },
+      { "name": "node-active", "value": "0 11px 28px rgba(53, 104, 200, .18)", "purpose": "Identifies selected and running workflow nodes." },
+      { "name": "floating-layer", "value": "0 16px 46px rgba(35, 49, 68, .16)", "purpose": "Temporary node libraries, edge panels, dialogs, and disclosures." }
+    ],
+    "motion": [
+      { "name": "surface-enter", "value": "320ms cubic-bezier(.16, 1, .3, 1)", "purpose": "Switches between graph, results, detail, and empty views." },
+      { "name": "state-change", "value": "160ms ease", "purpose": "Hover, selection, border, background, and control feedback." },
+      { "name": "status-breathe", "value": "2600ms ease-in-out infinite", "purpose": "Quiet live-engine indication; disabled for reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "compact-desktop", "value": "1280px" },
+      { "name": "edge-panels", "value": "960px" },
+      { "name": "mobile", "value": "680px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single emphasized command in a local action group.",
+      "html": "<button class=\"ds-btn-primary\">RUN FLOW</button>",
+      "css": ".ds-btn-primary { height: 34px; padding: 0 12px; border: 1px solid var(--brand); border-radius: 7px; background: var(--brand); color: #fff; font: 600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: background-color .16s ease, border-color .16s ease; } .ds-btn-primary:hover { border-color: var(--brand-hover); background: var(--brand-hover); } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A compact bordered command used beside a primary action.",
+      "html": "<button class=\"ds-btn-secondary\">BACK TO RESULTS</button>",
+      "css": ".ds-btn-secondary { height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); font: 600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: color .16s ease, border-color .16s ease, background-color .16s ease; } .ds-btn-secondary:hover { border-color: #9bb5df; background: var(--brand-soft); color: var(--brand); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "Utility Action",
+      "kind": "nav",
+      "refersTo": "utility-action",
+      "description": "A circular tool switch for the 64px application rail.",
+      "html": "<button class=\"ds-utility-action\" aria-label=\"Workflows\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><path d=\"M10 6.5h4a3 3 0 0 1 3 3V14\"/></svg></button>",
+      "css": ".ds-utility-action { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 50%; background: var(--brand-soft); color: var(--brand); transition: color .16s ease, background-color .16s ease; } .ds-utility-action:hover { background: #e2eaff; color: var(--brand-hover); } .ds-utility-action:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "Configuration Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A compact field for URLs, selectors, identifiers, and schema values.",
+      "html": "<label class=\"ds-field\"><span>SELECTOR</span><input value=\"article .content\" readonly></label>",
+      "css": ".ds-field { display: grid; gap: 5px; color: var(--text-muted); font: 600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-field input { width: 240px; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-subtle); color: var(--text); font: 400 10px 'SFMono-Regular', Consolas, monospace; } .ds-field input:hover { border-color: #9bb5df; } .ds-field input:focus-visible { border-color: var(--brand); background: #fff; outline: 0; box-shadow: 0 0 0 3px rgba(53,104,200,.1); }"
+    },
+    {
+      "name": "Workflow Node",
+      "kind": "card",
+      "refersTo": "workflow-node",
+      "description": "The signature stable unit of the crawler graph.",
+      "html": "<article class=\"ds-node\"><header><i>HTTP</i><code>fetch-01</code></header><strong>Request article</strong><code>GET / {{articleUrl}}</code><span>RUNNING</span></article>",
+      "css": ".ds-node { position: relative; width: 196px; height: 110px; border: 2px solid var(--brand); border-radius: 7px; background: var(--surface); color: var(--text); box-shadow: 0 11px 28px rgba(53,104,200,.18); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-node header { display: flex; height: 32px; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid #edf0f3; color: var(--text-muted); font: 500 10px 'SFMono-Regular', Consolas, monospace; } .ds-node header i { padding: 4px 6px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-style: normal; } .ds-node > strong, .ds-node > code { display: block; margin: 12px 10px 0; } .ds-node > strong { font-size: 12px; } .ds-node > code { margin-top: 5px; color: var(--text-muted); font-size: 9px; } .ds-node > span { position: absolute; right: 9px; bottom: 8px; color: var(--brand); font-size: 9px; font-weight: 700; }"
+    },
+    {
+      "name": "Result Row",
+      "kind": "custom",
+      "refersTo": "result-row",
+      "description": "A stable, keyboard-addressable captured item that opens the center detail view.",
+      "html": "<div class=\"ds-result-row\" tabindex=\"0\"><span><strong>Captured article title</strong><small>Source · Author</small></span><code>2026-08-02 17:48</code><b>OPEN</b></div>",
+      "css": ".ds-result-row { display: grid; width: 520px; height: 52px; grid-template-columns: minmax(0,1fr) 130px 48px; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text); font: 400 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: background-color .14s ease; } .ds-result-row:hover { background: #f0f5ff; } .ds-result-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; } .ds-result-row strong, .ds-result-row small { display: block; } .ds-result-row small, .ds-result-row code { margin-top: 4px; color: var(--text-muted); font-size: 9px; } .ds-result-row b { color: var(--brand); font-size: 9px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clear Automation Workbench",
+    "overview": "Lane Studio is a quiet desktop workbench where operators build a crawl as a visible sequence, watch execution evidence, and move directly from captured rows into readable source detail. It combines a pale technical canvas with a full-viewport white application shell, precise dividers, and small moments of sun, coral, mint, and violet so different node roles remain recognizable without turning the product into a one-hue console. The design is dense but not cramped. Navigation and status stay fixed around the work, the graph remains the visual center, and details replace the center surface instead of appearing in a drawer or modal.",
+    "keyCharacteristics": [
+      "One full-viewport, continuous studio with a 64px utility rail, 248px flow rail, flexible workspace, and 316px inspector.",
+      "A restrained neutral foundation with blue for action and distinct semantic and node-role accents.",
+      "Compact controls, 6-8px corners, stable dimensions, and no nested dashboard cards.",
+      "System sans for operation, monospace for inspectable values, and a Chinese serif stack for captured article reading.",
+      "Purposeful surface transitions that disappear when reduced motion is requested."
+    ],
+    "rules": [
+      { "name": "The Semantic Independence Rule", "body": "Blue communicates action and selection; green, amber, and coral keep their own operational meanings.", "section": "colors" },
+      { "name": "The Reading Shift Rule", "body": "Serif appears only when the user enters captured article content. Controls, metadata, and surrounding navigation remain sans or mono.", "section": "typography" },
+      { "name": "The Replace-the-Center Rule", "body": "Canvas, results, history, and article detail are peer views that replace the center region while preserving operational context.", "section": "layout" },
+      { "name": "The Functional Depth Rule", "body": "Strong elevation must identify a temporary or selected layer, never decorate static content.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the graph or currently selected evidence as the dominant center surface.",
+      "Do preserve the 64/248/flexible/316 desktop structure and its documented responsive collapses.",
+      "Do treat article detail as a full center view with reading typography, metadata, keyboard navigation, and focus restoration."
+    ],
+    "donts": [
+      "Don't open captured item detail in a drawer, modal, or dialog.",
+      "Don't convert the studio into a bento dashboard, nested cards, a marketing hero, or a decorative gradient field.",
+      "Don't make every node and status blue; preserve role and semantic distinctions."
+    ]
+  }
+}

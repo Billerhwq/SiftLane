@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addEdge,
   applyEdgeChanges,
@@ -18,17 +18,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertCircle,
+  Bell,
   Braces,
   CalendarClock,
   Check,
   ChevronRight,
+  CircleHelp,
   CodeXml,
+  Database,
   Download,
-  FileJson,
   GitBranch,
   Globe2,
   ListFilter,
   ListPlus,
+  LockKeyhole,
+  LogOut,
   Menu,
   PanelRight,
   Play,
@@ -40,14 +44,19 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  Users,
+  Workflow,
   X,
 } from "lucide-react";
-import { api, streamRunEvents } from "./api";
+import { API_BASE, api, streamRunEvents } from "./api";
 import { Dialog } from "./components/Dialog";
 import { EventDock } from "./components/EventDock";
 import { FlowNodeCard, type FlowNodeData, type NodeExecutionState } from "./components/FlowNodeCard";
+import { IntegrationDrawer } from "./components/IntegrationDrawer";
+import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { NodeInspector } from "./components/NodeInspector";
 import { ScheduleDrawer } from "./components/ScheduleDrawer";
+import { TeamDrawer } from "./components/TeamDrawer";
 import { useMediaQuery, useModalFocus } from "./hooks/useModalFocus";
 import type {
   FlowDefinition,
@@ -108,6 +117,7 @@ function newFlow(name: string): FlowDefinition {
     name,
     description: "",
     enabled: true,
+    visibility: "team",
     max_items: 100,
     timeout_seconds: 300,
     parameter_schema: { type: "object", additionalProperties: true },
@@ -156,15 +166,17 @@ function mergeEvents(previous: RunEvent[], incoming: RunEvent[]) {
 export function App() {
   const queryClient = useQueryClient();
   const health = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 3_000 });
-  const capabilities = useQuery({ queryKey: ["capabilities"], queryFn: api.capabilities });
-  const connectors = useQuery({ queryKey: ["connectors"], queryFn: api.connectors });
-  const schedules = useQuery({ queryKey: ["schedules"], queryFn: api.schedules, refetchInterval: 10_000 });
-  const flows = useQuery({ queryKey: ["flows"], queryFn: api.flows });
-  const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, refetchInterval: 1_500 });
+  const currentUser = useQuery({ queryKey: ["me"], queryFn: api.me, retry: false });
+  const authenticated = currentUser.isSuccess;
+  const capabilities = useQuery({ queryKey: ["capabilities"], queryFn: api.capabilities, enabled: authenticated });
+  const schedules = useQuery({ queryKey: ["schedules"], queryFn: api.schedules, refetchInterval: 10_000, enabled: authenticated });
+  const flows = useQuery({ queryKey: ["flows"], queryFn: api.flows, enabled: authenticated });
+  const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, refetchInterval: 1_500, enabled: authenticated });
 
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [draft, setDraft] = useState<FlowRecord | null>(null);
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState<ViewTab>("editor");
@@ -177,6 +189,7 @@ export function App() {
   const [nodeLibrary, setNodeLibrary] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [mobileRail, setMobileRail] = useState(false);
   const [mobileInspector, setMobileInspector] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -186,12 +199,23 @@ export function App() {
   const inspectorRef = useModalFocus<HTMLDivElement>(isNarrow && mobileInspector, () => setMobileInspector(false));
   const connectorRef = useModalFocus<HTMLElement>(connectorsOpen, () => setConnectorsOpen(false));
   const scheduleRef = useModalFocus<HTMLDivElement>(schedulesOpen, () => setSchedulesOpen(false));
+  const teamRef = useModalFocus<HTMLDivElement>(teamOpen, () => setTeamOpen(false));
 
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 4_000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (currentUser.data?.auth_mode !== "team") return;
+    const timer = window.setInterval(() => {
+      void api.refreshSession().catch(() => {
+        window.location.reload();
+      });
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [currentUser.data?.auth_mode]);
 
   useEffect(() => {
     if (!selectedFlowId && flows.data?.length) setSelectedFlowId(flows.data[0].id);
@@ -222,6 +246,10 @@ export function App() {
   }, [flowRuns, selectedRunId]);
 
   const selectedRun = flowRuns.find((run) => run.id === selectedRunId);
+
+  useEffect(() => {
+    setSelectedItemId(null);
+  }, [selectedRunId]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -468,18 +496,34 @@ export function App() {
 
   const filteredFlows = (flows.data ?? []).filter((flow) => flow.name.toLowerCase().includes(search.toLowerCase()));
   const error = health.error || capabilities.error || flows.error || runs.error;
+  const canCreateFlow = currentUser.data?.role !== "viewer";
+  const canManageFlow = Boolean(draft && currentUser.data && (currentUser.data.role === "admin" || currentUser.data.id === draft.owner_id));
+  const canRunFlow = Boolean(draft && currentUser.data && (
+    currentUser.data.role === "admin"
+    || currentUser.data.id === draft.owner_id
+    || (currentUser.data.role === "editor" && draft.visibility === "team")
+  ));
+
+  if (currentUser.isLoading) {
+    return <div className="auth-screen"><div className="auth-loading"><i /><strong>正在验证工作区</strong></div></div>;
+  }
+  if (currentUser.isError || !currentUser.data) {
+    return <LoginScreen engineOnline={!health.isError} />;
+  }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${selectedItemId ? "detail-mode" : ""}`}>
       <header className="topbar">
         <button className="mobile-only icon-button" onClick={() => setMobileRail(true)} aria-label="打开流程列表"><Menu size={18} /></button>
-        <div className="brand"><span><ChevronRight size={19} /></span><strong>Siftlane</strong></div>
-        <div className="breadcrumb"><ChevronRight size={13} /><b>本地工作区</b>{draft && <><ChevronRight size={13} /><span>{draft.name}</span></>}</div>
+        <div className="brand"><span><ChevronRight size={19} /></span><div><strong>Siftlane</strong><small>采集工作室</small></div></div>
+        <div className="breadcrumb"><b>Studio</b><ChevronRight size={13} /><span>{draft?.name ?? "本地工作区"}</span></div>
         <div className="topbar__actions">
-          <button className="button" onClick={() => setSchedulesOpen(true)}><CalendarClock size={15} /><span className="desktop-label">调度</span></button>
-          <button className="button" onClick={() => setConnectorsOpen(true)}><Plug size={15} /><span className="desktop-label">连接器</span></button>
+          <a className="icon-button" href={`${API_BASE}/docs`} target="_blank" rel="noreferrer" title="API 帮助" aria-label="打开 API 帮助"><CircleHelp size={18} /></a>
+          <button className="icon-button" onClick={() => setEventsExpanded(true)} title="运行事件" aria-label="展开运行事件"><Bell size={18} /></button>
           <button className="icon-button" onClick={() => void Promise.all([health.refetch(), flows.refetch(), runs.refetch()])} title="刷新状态" aria-label="刷新状态"><RefreshCw size={16} /></button>
-          <button className="button primary" onClick={() => setNewDialog(true)}><Plus size={16} />新建流程</button>
+          <button className="button primary" disabled={!canCreateFlow} onClick={() => setNewDialog(true)}><Plus size={16} />新建流程</button>
+          <span className="user-chip"><span className="user-avatar" aria-hidden="true">{currentUser.data.display_name.slice(0, 1).toUpperCase()}</span><span><strong>{currentUser.data.display_name}</strong><small>{currentUser.data.role}</small></span></span>
+          {currentUser.data.auth_mode === "team" && <button className="icon-button" onClick={() => void api.logout().then(() => window.location.reload())} title="退出登录" aria-label="退出登录"><LogOut size={16} /></button>}
           <button className="mobile-only icon-button" onClick={() => setMobileInspector(true)} aria-label="打开设置"><PanelRight size={18} /></button>
         </div>
       </header>
@@ -492,6 +536,19 @@ export function App() {
       </section>
 
       {error && <div className="global-error"><AlertCircle size={16} /><span>无法连接执行引擎：{error instanceof Error ? error.message : "未知错误"}</span><button onClick={() => window.location.reload()}>重新连接</button></div>}
+
+      <nav className="utility-rail" aria-label="主功能">
+        <div className="utility-rail__main">
+          <button className={tab === "editor" ? "selected" : ""} onClick={() => { setTab("editor"); setSelectedItemId(null); }} title="流程编排" aria-label="流程编排" aria-current={tab === "editor" ? "page" : undefined}><Workflow size={19} /></button>
+          <button className={tab === "runs" ? "selected" : ""} onClick={() => { setTab("runs"); setSelectedItemId(null); }} title="运行记录" aria-label="查看运行记录" aria-current={tab === "runs" ? "page" : undefined}><Activity size={19} /></button>
+          <button className={tab === "results" ? "selected" : ""} onClick={() => { setTab("results"); setSelectedItemId(null); }} title="采集结果" aria-label="查看采集结果" aria-current={tab === "results" ? "page" : undefined}><Database size={19} /></button>
+          <span />
+          <button onClick={() => setSchedulesOpen(true)} title="调度" aria-label="打开调度"><CalendarClock size={18} /></button>
+          <button onClick={() => setConnectorsOpen(true)} title="连接器" aria-label="打开连接器"><Plug size={18} /></button>
+          {currentUser.data.role === "admin" && <button onClick={() => setTeamOpen(true)} title="团队与安全" aria-label="打开团队与安全"><Users size={18} /></button>}
+        </div>
+        <button onClick={() => { setSelectedNodeId(null); setMobileInspector(true); }} title="工作区设置" aria-label="打开工作区设置"><Settings2 size={18} /></button>
+      </nav>
 
       <aside ref={flowRailRef} className={`flow-rail ${mobileRail ? "mobile-open" : ""}`} inert={isNarrow && !mobileRail ? true : undefined} aria-hidden={isNarrow && !mobileRail ? true : undefined}>
         <header><strong>流程</strong><button className="icon-button mobile-only" onClick={() => setMobileRail(false)} aria-label="关闭流程列表"><X size={16} /></button></header>
@@ -524,13 +581,13 @@ export function App() {
       <section className="workspace">
         <header className="workspace-bar">
           <nav aria-label="工作区视图">
-            <button className={tab === "editor" ? "selected" : ""} onClick={() => setTab("editor")}>编排</button>
-            <button className={tab === "runs" ? "selected" : ""} onClick={() => setTab("runs")}>运行记录</button>
-            <button className={tab === "results" ? "selected" : ""} onClick={() => setTab("results")}>结果</button>
+            <button className={tab === "editor" ? "selected" : ""} onClick={() => { setTab("editor"); setSelectedItemId(null); }}>编排</button>
+            <button className={tab === "runs" ? "selected" : ""} onClick={() => { setTab("runs"); setSelectedItemId(null); }}>运行记录</button>
+            <button className={tab === "results" ? "selected" : ""} onClick={() => { setTab("results"); setSelectedItemId(null); }}>结果</button>
           </nav>
           <div className="workspace-bar__actions">
             <div className="node-library-wrap">
-              <button className="button" disabled={!draft || tab !== "editor"} onClick={() => setNodeLibrary(!nodeLibrary)}><Plus size={14} />添加节点</button>
+              <button className="button" disabled={!draft || tab !== "editor" || !canManageFlow} onClick={() => setNodeLibrary(!nodeLibrary)}><Plus size={14} />添加节点</button>
               {nodeLibrary && (
                 <div className="node-library">
                   <header><strong>节点库</strong><button className="icon-button" onClick={() => setNodeLibrary(false)} aria-label="关闭"><X size={14} /></button></header>
@@ -541,13 +598,16 @@ export function App() {
                 </div>
               )}
             </div>
-            <button className="button" disabled={!dirty || busy} onClick={() => void saveFlow()}><Save size={14} />保存</button>
-            <button className="button primary" disabled={!draft || busy} onClick={() => void runFlow()}><Play size={14} fill="currentColor" />运行</button>
+            <button className="button" disabled={!dirty || busy || !canManageFlow} onClick={() => void saveFlow()}><Save size={14} />保存</button>
+            <button className="button primary" disabled={!draft || busy || !canRunFlow} onClick={() => void runFlow()}><Play size={14} fill="currentColor" />运行</button>
           </div>
         </header>
 
         {!draft ? (
-          <div className="workspace-empty"><FileJson size={34} /><h1>还没有流程</h1><p>创建第一个流程后，编排画布会显示在这里。</p><button className="button primary" onClick={() => setNewDialog(true)}><Plus size={15} />新建流程</button></div>
+          <div className="workspace-empty">
+            <div className="workspace-empty-visual" aria-hidden="true"><i /><i /><i /><span /><span /></div>
+            <h1>还没有流程</h1><p>创建第一个流程后，采集链路会显示在这里。</p><button className="button primary" onClick={() => setNewDialog(true)}><Plus size={15} />新建流程</button>
+          </div>
         ) : tab === "editor" ? (
           <div className="graph-stage">
             <div className="graph-title"><h1>{draft.name}</h1><p>版本 {draft.revision} · {dirty ? "有未保存修改" : `保存于 ${dateTime(draft.updated_at)}`}</p></div>
@@ -575,7 +635,14 @@ export function App() {
         ) : tab === "runs" ? (
           <RunTable runs={flowRuns} selectedRunId={selectedRunId} onSelect={setSelectedRunId} />
         ) : (
-          <ResultTable run={selectedRun} loading={items.isLoading} items={items.data?.items ?? []} error={items.error} />
+          <ResultWorkspace
+            run={selectedRun}
+            loading={items.isLoading}
+            items={items.data?.items ?? []}
+            error={items.error}
+            selectedItemId={selectedItemId}
+            onSelectItem={setSelectedItemId}
+          />
         )}
 
         <EventDock run={selectedRun} events={events} expanded={eventsExpanded} onExpandedChange={setEventsExpanded} onCancel={() => void cancelRun()} streamState={streamState} />
@@ -587,11 +654,12 @@ export function App() {
           <NodeInspector
             node={selectedNode}
             capability={selectedCapability}
-            onChange={(node) => updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((item) => item.id === node.id ? node : item) }))}
-            onDelete={removeNode}
+            readOnly={!canManageFlow}
+            onChange={(node) => canManageFlow && updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((item) => item.id === node.id ? node : item) }))}
+            onDelete={() => canManageFlow && removeNode()}
           />
         ) : draft ? (
-          <FlowInspector flow={draft} run={selectedRun} onChange={(flow) => { setDraft(flow); setDirty(true); }} onDelete={() => void deleteFlow()} />
+          <FlowInspector flow={draft} run={selectedRun} readOnly={!canManageFlow} onChange={(flow) => { setDraft(flow); setDirty(true); }} onDelete={() => void deleteFlow()} />
         ) : <aside className="inspector blank"><Settings2 size={24} /><p>选择流程或节点后查看设置</p></aside>}
       </div>
 
@@ -610,22 +678,20 @@ export function App() {
               queryClient.setQueryData<RunRecord[]>(["runs"], (current = []) => [run, ...current.filter((item) => item.id !== run.id)]);
             }}
             onToast={(kind, message) => setToast({ kind, message })}
+            currentUser={currentUser.data}
           />
         </div>
       )}
 
       {connectorsOpen && (
-        <div className="side-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setConnectorsOpen(false)}>
-          <aside ref={connectorRef} className="side-drawer" role="dialog" aria-modal="true" aria-label="连接器">
-            <header><div><Plug size={17} /><strong>连接器</strong><span>{connectors.data?.length ?? 0}</span></div><button className="icon-button" onClick={() => setConnectorsOpen(false)} aria-label="关闭"><X size={16} /></button></header>
-            {connectors.isLoading ? <div className="drawer-loading">正在读取连接器清单</div> : connectors.data?.length ? connectors.data.map((connector) => (
-              <article className="connector-row" key={connector.id}>
-                <div><strong>{connector.name}</strong><code>{connector.id} · {connector.version}</code></div>
-                <p>{connector.description}</p>
-                <span>{connector.capabilities.map((capability) => capability.label).join(" · ")}</span>
-              </article>
-            )) : <div className="drawer-empty"><Plug size={28} /><h2>尚未安装连接器</h2><p>引擎已启用 Connector SDK v1 契约。</p><code>siftlane.connectors</code></div>}
-          </aside>
+        <div ref={(element) => { connectorRef.current = element; }} className="side-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setConnectorsOpen(false)}>
+          <IntegrationDrawer currentUser={currentUser.data} onClose={() => setConnectorsOpen(false)} onToast={(kind, message) => setToast({ kind, message })} />
+        </div>
+      )}
+
+      {teamOpen && (
+        <div ref={teamRef} className="side-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setTeamOpen(false)}>
+          <TeamDrawer currentUser={currentUser.data} onClose={() => setTeamOpen(false)} onToast={(kind, message) => setToast({ kind, message })} />
         </div>
       )}
 
@@ -641,28 +707,65 @@ export function App() {
   );
 }
 
-function FlowInspector({ flow, run, onChange, onDelete }: { flow: FlowRecord; run?: RunRecord; onChange: (flow: FlowRecord) => void; onDelete: () => void }) {
+function LoginScreen({ engineOnline }: { engineOnline: boolean }) {
+  const queryClient = useQueryClient();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const session = await api.login(username, password);
+      queryClient.setQueryData(["me"], session.user);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "登录失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-screen">
+      <form className="login-panel" onSubmit={(event) => void submit(event)}>
+        <header><span><ChevronRight size={20} /></span><div><strong>Siftlane</strong><small>团队工作区</small></div></header>
+        <div className="login-title"><LockKeyhole size={22} /><div><h1>登录</h1><p>使用工作区账号继续。</p></div></div>
+        <label className="field"><span>用户名</span><input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required /></label>
+        <label className="field"><span>密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {message && <div className="login-error" role="alert"><AlertCircle size={15} />{message}</div>}
+        <button className="button primary login-submit" disabled={busy || !engineOnline}>{busy ? "正在验证" : engineOnline ? "登录" : "引擎离线"}</button>
+        <footer><i className={engineOnline ? "" : "down"} />{engineOnline ? "执行引擎在线" : "无法连接执行引擎"}</footer>
+      </form>
+    </main>
+  );
+}
+
+function FlowInspector({ flow, run, readOnly, onChange, onDelete }: { flow: FlowRecord; run?: RunRecord; readOnly: boolean; onChange: (flow: FlowRecord) => void; onDelete: () => void }) {
   return (
     <aside className="inspector">
       <header className="inspector__header"><strong>流程设置</strong><span>REV {flow.revision}</span></header>
       <section className="inspector__section">
         <div className="section-heading"><strong>基本信息</strong><span>{flow.enabled ? "已启用" : "已暂停"}</span></div>
-        <label className="field"><span>流程名称</span><input value={flow.name} onChange={(event) => onChange({ ...flow, name: event.target.value })} /></label>
-        <label className="field"><span>描述</span><textarea value={flow.description} onChange={(event) => onChange({ ...flow, description: event.target.value })} /></label>
-        <label className="switch-field"><span>允许运行</span><input type="checkbox" checked={flow.enabled} onChange={(event) => onChange({ ...flow, enabled: event.target.checked })} /><i /></label>
+        <label className="field"><span>流程名称</span><input disabled={readOnly} value={flow.name} onChange={(event) => onChange({ ...flow, name: event.target.value })} /></label>
+        <label className="field"><span>描述</span><textarea disabled={readOnly} value={flow.description} onChange={(event) => onChange({ ...flow, description: event.target.value })} /></label>
+        <label className="field"><span>可见范围</span><select disabled={readOnly} value={flow.visibility} onChange={(event) => onChange({ ...flow, visibility: event.target.value as "private" | "team" })}><option value="private">仅所有者</option><option value="team">团队可见</option></select></label>
+        <label className="switch-field"><span>允许运行</span><input disabled={readOnly} type="checkbox" checked={flow.enabled} onChange={(event) => onChange({ ...flow, enabled: event.target.checked })} /><i /></label>
       </section>
       <section className="inspector__section">
         <div className="section-heading"><strong>运行策略</strong></div>
         <div className="field-grid">
-          <label className="field"><span>最大结果</span><input type="number" min={1} max={10000} value={flow.max_items} onChange={(event) => onChange({ ...flow, max_items: Number(event.target.value) })} /></label>
-          <label className="field"><span>超时（秒）</span><input type="number" min={5} max={3600} value={flow.timeout_seconds} onChange={(event) => onChange({ ...flow, timeout_seconds: Number(event.target.value) })} /></label>
+          <label className="field"><span>最大结果</span><input disabled={readOnly} type="number" min={1} max={10000} value={flow.max_items} onChange={(event) => onChange({ ...flow, max_items: Number(event.target.value) })} /></label>
+          <label className="field"><span>超时（秒）</span><input disabled={readOnly} type="number" min={5} max={3600} value={flow.timeout_seconds} onChange={(event) => onChange({ ...flow, timeout_seconds: Number(event.target.value) })} /></label>
         </div>
       </section>
       <section className="inspector__section run-summary">
         <div className="section-heading"><strong>最近运行</strong>{run && <span className={`status-${run.status.toLowerCase()}`}>{statusLabel[run.status]}</span>}</div>
         {run ? <dl><div><dt>开始</dt><dd>{dateTime(run.started_at)}</dd></div><div><dt>结果</dt><dd>{run.processed_items} 项</dd></div><div><dt>耗时</dt><dd>{duration(run)}</dd></div></dl> : <p className="quiet-empty">还没有运行记录</p>}
       </section>
-      <button className="danger-button" type="button" onClick={onDelete}>删除流程</button>
+      <button className="danger-button" type="button" disabled={readOnly} onClick={onDelete}>删除流程</button>
     </aside>
   );
 }
@@ -695,14 +798,56 @@ function RunTable({ runs, selectedRunId, onSelect }: { runs: RunRecord[]; select
   );
 }
 
-function ResultTable({ run, loading, items, error }: { run?: RunRecord; loading: boolean; items: ItemRecord[]; error: Error | null }) {
+function ResultWorkspace({ run, loading, items, error, selectedItemId, onSelectItem }: { run?: RunRecord; loading: boolean; items: ItemRecord[]; error: Error | null; selectedItemId: string | null; onSelectItem: (id: string | null) => void }) {
+  const returnFocusId = useRef<string | null>(null);
+  const selectedIndex = items.findIndex((item) => item.id === selectedItemId);
+
+  useEffect(() => {
+    if (selectedItemId || !returnFocusId.current) return;
+    const rowId = `result-row-${returnFocusId.current}`;
+    window.requestAnimationFrame(() => document.getElementById(rowId)?.focus());
+  }, [selectedItemId]);
+
+  function selectItem(id: string | null) {
+    if (id) returnFocusId.current = id;
+    onSelectItem(id);
+  }
+
+  if (selectedIndex >= 0) {
+    return (
+      <ItemDetailPanel
+        item={items[selectedIndex]}
+        index={selectedIndex}
+        total={items.length}
+        onBack={() => selectItem(null)}
+        onPrevious={selectedIndex > 0 ? () => selectItem(items[selectedIndex - 1].id) : undefined}
+        onNext={selectedIndex < items.length - 1 ? () => selectItem(items[selectedIndex + 1].id) : undefined}
+      />
+    );
+  }
   if (!run) return <div className="view-empty"><Download size={30} /><h2>还没有可查看的结果</h2><p>选择一次运行后查看结构化输出。</p></div>;
   return (
     <div className="data-view">
       <header><div><h1>采集结果</h1><p>{run.id.slice(0, 12)} · {run.processed_items} 项</p></div></header>
       {error ? <div className="inline-error"><AlertCircle size={16} />{error.message}</div> : loading ? <div className="data-loading">正在读取结果</div> : items.length ? (
         <div className="table-wrap"><table><thead><tr><th>标题</th><th>来源 URL</th><th>类型</th><th>观察时间</th><th>外部 ID</th></tr></thead><tbody>{items.map((item) => (
-          <tr key={item.id}><td><strong>{item.title}</strong><small>{item.content.slice(0, 100)}</small></td><td><a href={item.url} target="_blank" rel="noreferrer">{item.url}</a></td><td>{item.media_type}</td><td>{dateTime(item.observed_at)}</td><td><code>{item.external_id.slice(0, 12)}</code></td></tr>
+          <tr
+            key={item.id}
+            id={`result-row-${item.id}`}
+            className="result-row"
+            onClick={() => selectItem(item.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                selectItem(item.id);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`查看详情：${item.title}`}
+          >
+            <td><strong>{item.title}</strong><small>{item.content.slice(0, 100)}</small></td><td><a href={item.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{item.url}</a></td><td>{item.media_type}</td><td>{dateTime(item.observed_at)}</td><td><code>{item.external_id.slice(0, 12)}</code></td>
+          </tr>
         ))}</tbody></table></div>
       ) : <div className="view-empty embedded"><Download size={28} /><h2>本次运行没有输出结果</h2><p>{run.error_message ?? statusLabel[run.status]}</p></div>}
     </div>

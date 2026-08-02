@@ -42,6 +42,8 @@ if ($Install) {
         & $PythonExecutable -m venv (Join-Path $engineRoot ".venv")
         Assert-ExitCode "Create Python virtual environment"
     }
+    & $venvPython -m pip install --upgrade "pip>=26.1.2"
+    Assert-ExitCode "Upgrade Python package installer"
     & $venvPython -m pip install -e "$engineRoot[test]"
     Assert-ExitCode "Install engine build dependencies"
 
@@ -154,6 +156,9 @@ $checksumLines = Get-ChildItem -LiteralPath $artifactsRoot -File |
         "$($hash.Hash.ToLowerInvariant())  $($_.Name)"
     }
 $checksumLines | Set-Content -LiteralPath (Join-Path $artifactsRoot "SHA256SUMS.txt") -Encoding ASCII
+
+& $venvPython (Join-Path $engineRoot "scripts\security_audit.py") --repo-root $repoRoot --artifacts-dir $artifactsRoot
+Assert-ExitCode "Release artifact security audit"
 
 Write-Host "Release artifacts passed smoke checks: $artifactsRoot"
 Get-ChildItem -LiteralPath $artifactsRoot -File | Sort-Object Name | Select-Object Name, Length

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarClock, Edit3, Play, Plus, Save, Trash2, X } from "lucide-react";
 import { api } from "../api";
-import type { FlowRecord, RunRecord, ScheduleDefinition, ScheduleRecord } from "../types";
+import type { CurrentUser, FlowRecord, RunRecord, ScheduleDefinition, ScheduleRecord } from "../types";
 
 interface Props {
   schedules: ScheduleRecord[];
@@ -11,6 +11,7 @@ interface Props {
   onChanged: () => void;
   onRun: (run: RunRecord) => void;
   onToast: (kind: "success" | "error", message: string) => void;
+  currentUser: CurrentUser;
 }
 
 function blank(flowId = ""): ScheduleDefinition {
@@ -24,19 +25,21 @@ function blank(flowId = ""): ScheduleDefinition {
   };
 }
 
-export function ScheduleDrawer({ schedules, flows, loading, onClose, onChanged, onRun, onToast }: Props) {
+export function ScheduleDrawer({ schedules, flows, loading, onClose, onChanged, onRun, onToast, currentUser }: Props) {
   const [editing, setEditing] = useState<ScheduleRecord | null>(null);
   const [form, setForm] = useState<ScheduleDefinition>(() => blank(flows[0]?.id));
   const [parametersText, setParametersText] = useState("{}");
   const [busy, setBusy] = useState(false);
+  const runnableFlows = flows.filter((flow) => currentUser.role === "admin" || currentUser.id === flow.owner_id || (currentUser.role === "editor" && flow.visibility === "team"));
+  const canCreate = currentUser.role !== "viewer" && runnableFlows.length > 0;
 
   useEffect(() => {
-    if (!form.flow_id && flows[0]) setForm((current) => ({ ...current, flow_id: flows[0].id }));
-  }, [flows, form.flow_id]);
+    if (!form.flow_id && runnableFlows[0]) setForm((current) => ({ ...current, flow_id: runnableFlows[0].id }));
+  }, [runnableFlows, form.flow_id]);
 
   function reset() {
     setEditing(null);
-    setForm(blank(flows[0]?.id));
+    setForm(blank(runnableFlows[0]?.id));
     setParametersText("{}");
   }
 
@@ -110,13 +113,13 @@ export function ScheduleDrawer({ schedules, flows, loading, onClose, onChanged, 
         <div><CalendarClock size={17} /><strong>调度计划</strong><span>{schedules.length}</span></div>
         <button className="icon-button" onClick={onClose} aria-label="关闭"><X size={16} /></button>
       </header>
-      <section className="schedule-form">
+      {canCreate && <section className="schedule-form">
         <div className="schedule-form__title">
           <strong>{editing ? "编辑计划" : "新建计划"}</strong>
           {editing && <button className="button" onClick={reset}><Plus size={13} />新建</button>}
         </div>
         <label className="field"><span>名称</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-        <label className="field"><span>流程</span><select value={form.flow_id} onChange={(event) => setForm({ ...form, flow_id: event.target.value })}>{flows.map((flow) => <option key={flow.id} value={flow.id}>{flow.name}</option>)}</select></label>
+        <label className="field"><span>流程</span><select value={form.flow_id} onChange={(event) => setForm({ ...form, flow_id: event.target.value })}>{runnableFlows.map((flow) => <option key={flow.id} value={flow.id}>{flow.name}</option>)}</select></label>
         <div className="field-grid">
           <label className="field"><span>Cron</span><input value={form.cron} onChange={(event) => setForm({ ...form, cron: event.target.value })} /></label>
           <label className="field"><span>时区</span><input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} /></label>
@@ -124,14 +127,16 @@ export function ScheduleDrawer({ schedules, flows, loading, onClose, onChanged, 
         <label className="field"><span>运行参数 JSON</span><textarea value={parametersText} onChange={(event) => setParametersText(event.target.value)} spellCheck={false} /></label>
         <label className="switch-field"><span>启用计划</span><input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} /><i /></label>
         <button className="button primary schedule-save" disabled={busy || !form.flow_id || !form.name.trim()} onClick={() => void save()}><Save size={14} />{editing ? "保存修改" : "创建计划"}</button>
-      </section>
+      </section>}
       <section className="schedule-list" aria-label="计划列表">
-        {loading ? <div className="drawer-loading">正在读取计划</div> : schedules.map((schedule) => (
-          <article className="schedule-row" key={schedule.id}>
+        {loading ? <div className="drawer-loading">正在读取计划</div> : schedules.map((schedule) => {
+          const canManage = currentUser.role === "admin" || (currentUser.role === "editor" && [schedule.owner_id, schedule.created_by].includes(currentUser.id));
+          const canRun = currentUser.role === "admin" || currentUser.id === schedule.owner_id || (currentUser.role === "editor" && schedule.visibility === "team");
+          return <article className="schedule-row" key={schedule.id}>
             <div className="schedule-row__main">
               <i className={schedule.enabled ? "enabled" : ""} />
               <span><strong>{schedule.name}</strong><code>{schedule.cron} / {schedule.timezone}</code></span>
-              <label className="mini-switch" title={schedule.enabled ? "停用" : "启用"}><input type="checkbox" checked={schedule.enabled} onChange={() => void toggle(schedule)} /><i /></label>
+              <label className="mini-switch" title={schedule.enabled ? "停用" : "启用"}><input disabled={!canManage} type="checkbox" checked={schedule.enabled} onChange={() => void toggle(schedule)} /><i /></label>
             </div>
             <dl>
               <div><dt>下次运行</dt><dd>{schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString("zh-CN", { hour12: false }) : "已暂停"}</dd></div>
@@ -139,12 +144,12 @@ export function ScheduleDrawer({ schedules, flows, loading, onClose, onChanged, 
             </dl>
             {schedule.last_error && <p className="schedule-error">{schedule.last_error}</p>}
             <div className="schedule-row__actions">
-              <button className="icon-button" title="编辑" aria-label="编辑" onClick={() => edit(schedule)}><Edit3 size={14} /></button>
-              <button className="icon-button" title="立即运行" aria-label="立即运行" onClick={() => void trigger(schedule)}><Play size={14} /></button>
-              <button className="icon-button danger-icon" title="删除" aria-label="删除" onClick={() => void remove(schedule)}><Trash2 size={14} /></button>
+              <button className="icon-button" disabled={!canManage} title="编辑" aria-label="编辑" onClick={() => edit(schedule)}><Edit3 size={14} /></button>
+              <button className="icon-button" disabled={!canRun} title="立即运行" aria-label="立即运行" onClick={() => void trigger(schedule)}><Play size={14} /></button>
+              <button className="icon-button danger-icon" disabled={!canManage} title="删除" aria-label="删除" onClick={() => void remove(schedule)}><Trash2 size={14} /></button>
             </div>
-          </article>
-        ))}
+          </article>;
+        })}
         {!loading && !schedules.length && <div className="drawer-empty schedule-empty"><CalendarClock size={28} /><h2>还没有调度计划</h2><p>上方创建后，执行引擎会按时区计算下次运行时间。</p></div>}
       </section>
     </aside>

@@ -4,11 +4,52 @@ services:
     ports:
       - "127.0.0.1:8090:8090"
     environment:
-      SIFTLANE_ENGINE_API_TOKEN: ${SIFTLANE_ENGINE_API_TOKEN:-}
+      SIFTLANE_ENGINE_AUTH_MODE: team
+      SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_USERNAME: ${SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_PASSWORD: ${SIFTLANE_ENGINE_BOOTSTRAP_ADMIN_PASSWORD:?set a bootstrap admin password}
+      SIFTLANE_ENGINE_SECRET_KEY: ${SIFTLANE_ENGINE_SECRET_KEY:?set a stable engine secret key}
+      SIFTLANE_ENGINE_ALLOWED_ORIGINS: '["http://127.0.0.1:8080"]'
       SIFTLANE_ENGINE_WORKER_COUNT: ${SIFTLANE_ENGINE_WORKER_COUNT:-2}
     volumes:
       - siftlane-data:/data
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  web:
+    build:
+      context: ../apps/web
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:8090
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      engine:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 volumes:
   siftlane-data:

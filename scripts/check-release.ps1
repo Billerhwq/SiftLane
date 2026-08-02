@@ -73,9 +73,68 @@ $requiredPaths = @(
     "outputs\p2-branch-retry.png",
     "outputs\p2-scheduler.png"
 )
+$versionParts = $version.Split("-")[0].Split(".") | ForEach-Object { [int]$_ }
+if ($versionParts[0] -ge 1 -or $versionParts[1] -ge 3) {
+    $requiredPaths += @(
+        "PRD-SiftLane-product-lifecycle.md",
+        "documentation\threat-model.md",
+        "documentation\migrations.md",
+        "outputs\p3-team-audit.png",
+        "outputs\p3-private-flow.png"
+    )
+}
+if ($versionParts[0] -ge 1 -or $versionParts[1] -ge 4) {
+    $requiredPaths += @(
+        "documentation\connectors.md",
+        "documentation\delivery.md",
+        "outputs\p4-integrations-delivery.png"
+    )
+}
+if ($versionParts[0] -ge 1) {
+    $requiredPaths += @(
+        "documentation\architecture.md",
+        "documentation\flows.md",
+        "documentation\permissions.md",
+        "documentation\variables.md",
+        "documentation\cron.md",
+        "documentation\automation.md",
+        "documentation\tests.md",
+        "documentation\deployment.md",
+        "documentation\backup-restore.md",
+        "documentation\operations.md",
+        "documentation\incident-response.md",
+        "documentation\upgrade.md",
+        "documentation\compatibility.md",
+        "documentation\slo.md",
+        "documentation\alerts.yml",
+        "engine\Dockerfile",
+        "engine\compose.yaml",
+        "apps\web\Dockerfile",
+        "apps\web\nginx.conf",
+        "outputs\p5-capacity-report.json",
+        "outputs\p5-backup-restore-report.json",
+        "outputs\p5-soak-report.json",
+        "outputs\p5-production-readiness.png"
+    )
+}
 foreach ($relativePath in $requiredPaths) {
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $relativePath))) {
         throw "Required release evidence is missing: $relativePath"
+    }
+}
+
+if ($versionParts[0] -ge 1) {
+    $capacity = Get-Content -Raw (Join-Path $repoRoot "outputs\p5-capacity-report.json") | ConvertFrom-Json
+    $backup = Get-Content -Raw (Join-Path $repoRoot "outputs\p5-backup-restore-report.json") | ConvertFrom-Json
+    $soak = Get-Content -Raw (Join-Path $repoRoot "outputs\p5-soak-report.json") | ConvertFrom-Json
+    if (-not $capacity.passed -or $capacity.format -ne "siftlane.capacity/v1") {
+        throw "P5 capacity report is missing a passing v1 result"
+    }
+    if (-not $backup.passed -or $backup.format -ne "siftlane.backup-drill/v1") {
+        throw "P5 backup/restore report is missing a passing v1 result"
+    }
+    if (-not $soak.passed -or $soak.format -ne "siftlane.soak/v1" -or [double]$soak.profile.durationSeconds -lt 30) {
+        throw "P5 soak report must pass with a duration of at least 30 seconds"
     }
 }
 

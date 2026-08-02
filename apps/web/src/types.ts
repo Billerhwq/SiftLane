@@ -17,6 +17,9 @@ export type RunStatus =
   | "FAILED"
   | "CANCELLED";
 
+export type UserRole = "admin" | "editor" | "viewer";
+export type FlowVisibility = "private" | "team";
+
 export interface JsonSchema {
   type?: string;
   title?: string;
@@ -60,6 +63,7 @@ export interface FlowDefinition {
   name: string;
   description: string;
   enabled: boolean;
+  visibility: FlowVisibility;
   max_items: number;
   timeout_seconds: number;
   parameter_schema: Record<string, unknown>;
@@ -69,6 +73,7 @@ export interface FlowDefinition {
 
 export interface FlowRecord extends FlowDefinition {
   id: string;
+  owner_id: string;
   revision: number;
   created_at: string;
   updated_at: string;
@@ -96,6 +101,7 @@ export interface Health {
   workers: number;
   queuedRuns: number;
   database: string;
+  authMode: "local" | "team";
 }
 
 export interface RunRecord {
@@ -103,6 +109,9 @@ export interface RunRecord {
   flow_id: string;
   flow_name: string;
   flow_revision: number;
+  owner_id: string;
+  visibility: FlowVisibility;
+  created_by: string;
   status: RunStatus;
   parameters: Record<string, unknown>;
   idempotency_key: string | null;
@@ -157,6 +166,9 @@ export interface ScheduleDefinition {
 
 export interface ScheduleRecord extends ScheduleDefinition {
   id: string;
+  owner_id: string;
+  visibility: FlowVisibility;
+  created_by: string;
   revision: number;
   next_run_at: string | null;
   last_run_at: string | null;
@@ -185,4 +197,118 @@ export interface ConnectorManifest {
     allowed_domains: string[];
     media_download: boolean;
   };
+}
+
+export type ConnectorState = "enabled" | "disabled" | "error";
+
+export interface ManagedConnectorRecord {
+  id: string;
+  version: string;
+  previous_version: string | null;
+  state: ConnectorState;
+  source: string;
+  manifest: ConnectorManifest;
+  installed_at: string;
+  updated_at: string;
+}
+
+export type SecretScope = "connector" | "delivery_target";
+
+export interface SecretRecord {
+  id: string;
+  name: string;
+  scope_type: SecretScope;
+  scope_id: string;
+  owner_id: string;
+  created_by: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DeliveryTargetType = "webhook" | "ndjson";
+export type DeliveryAuthScheme = "none" | "bearer" | "hmac_sha256";
+
+export interface DeliveryTargetDefinition {
+  name: string;
+  type: DeliveryTargetType;
+  visibility: FlowVisibility;
+  enabled: boolean;
+  url: string | null;
+  auth_scheme: DeliveryAuthScheme;
+  secret_id: string | null;
+  max_attempts: number;
+  backoff_seconds: number;
+}
+
+export interface DeliveryTargetRecord extends DeliveryTargetDefinition {
+  id: string;
+  owner_id: string;
+  created_by: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DeliveryStatus = "queued" | "delivering" | "retrying" | "succeeded" | "dead_letter" | "cancelled";
+
+export interface DeliveryRecord {
+  id: string;
+  target_id: string;
+  run_id: string;
+  idempotency_key: string;
+  status: DeliveryStatus;
+  attempt_count: number;
+  next_attempt_at: string | null;
+  response_status: number | null;
+  error: string | null;
+  artifact_path: string | null;
+  payload_sha256: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+}
+
+export interface UserRecord {
+  id: string;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+}
+
+export interface CurrentUser extends UserRecord {
+  auth_mode: "local" | "team";
+}
+
+export interface AuthSession {
+  access_token: string;
+  token_type: "bearer";
+  expires_at: string;
+  user: CurrentUser;
+}
+
+export interface AuditRecord {
+  id: string;
+  actor_user_id: string | null;
+  actor_username: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  outcome: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SecurityOperations {
+  counters: Record<string, number>;
+  recentAlerts: Array<{
+    type: string;
+    detail: Record<string, unknown>;
+    created_at: string;
+  }>;
 }

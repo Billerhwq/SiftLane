@@ -11,8 +11,10 @@ from zoneinfo import ZoneInfo
 from croniter import croniter
 from jsonschema import ValidationError, validate
 
+from .auth import hash_password
 from .config import Settings
 from .engine import FlowEngine, RunCancelled
+from .integrations import ConnectorManager, DeliveryService, IntegrationStorage
 from .models import (
     EventRecord,
     FlowDefinition,
@@ -22,6 +24,7 @@ from .models import (
     RunStatus,
     ScheduleDefinition,
     ScheduleRecord,
+    UserRole,
     utc_now,
 )
 from .security import SecureHttpClient
@@ -34,19 +37,46 @@ class CrawlerService:
         self.storage = Storage(settings.database_path)
         self.http = SecureHttpClient(settings)
         self.engine = FlowEngine(self.storage, self.http)
+        self.integrations = IntegrationStorage(settings)
+        self.connector_manager = ConnectorManager(settings, self.integrations)
+        self.delivery = DeliveryService(settings, self.integrations, self.storage)
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._workers: list[asyncio.Task[None]] = []
         self._scheduler: asyncio.Task[None] | None = None
         self._scheduler_owner = f"scheduler-{uuid.uuid4()}"
         self._cancelled: dict[str, asyncio.Event] = {}
         self._subscribers: dict[str, set[asyncio.Queue[EventRecord]]] = defaultdict(set)
+        self.ready = False
 
     @property
     def queue_size(self) -> int:
         return self._queue.qsize()
 
     async def start(self) -> None:
+        self.ready = False
         await self.storage.initialize()
+        await self.integrations.initialize()
+        if self.settings.auth_mode == "team" and await self.storage.count_team_users() == 0:
+            bootstrap_password = self.settings.bootstrap_admin_password.get_secret_value()
+            if not bootstrap_password:
+                raise RuntimeError(
+                    "team auth requires a bootstrap admin password when no team users exist"
+                )
+            admin = await self.storage.create_user(
+                username=self.settings.bootstrap_admin_username.lower(),
+                display_name="Siftlane administrator",
+                password_hash=hash_password(bootstrap_password),
+                role=UserRole.ADMIN,
+            )
+            await self.storage.add_audit(
+                actor_user_id=admin.id,
+                actor_username=admin.username,
+                action="user.bootstrap",
+                resource_type="user",
+                resource_id=admin.id,
+                outcome="success",
+                detail={"role": admin.role.value},
+            )
         recovery = await self.storage.recover_runs()
         for run_id in recovery.recovered:
             await self._write_event(
@@ -73,8 +103,12 @@ class CrawlerService:
         self._scheduler = asyncio.create_task(
             self._scheduler_loop(), name="crawler-scheduler"
         )
+        await self.delivery.start()
+        self.ready = True
 
     async def stop(self) -> None:
+        self.ready = False
+        await self.delivery.stop()
         if self._scheduler is not None:
             self._scheduler.cancel()
             with suppress(asyncio.CancelledError):
@@ -87,29 +121,45 @@ class CrawlerService:
                 await task
         await self.http.close()
 
-    async def create_flow(self, definition: FlowDefinition) -> FlowRecord:
-        return await self.storage.create_flow(definition)
+    async def create_flow(
+        self, definition: FlowDefinition, owner_id: str = "local-operator"
+    ) -> FlowRecord:
+        return await self.storage.create_flow(definition, owner_id)
 
     async def create_schedule(
-        self, definition: ScheduleDefinition
+        self, definition: ScheduleDefinition, created_by: str = "local-operator"
     ) -> ScheduleRecord:
-        await self._validate_schedule(definition)
+        flow = await self._validate_schedule(definition)
         next_run = self._next_occurrence(definition, utc_now()) if definition.enabled else None
-        return await self.storage.create_schedule(definition, next_run)
+        return await self.storage.create_schedule(
+            definition,
+            next_run,
+            owner_id=flow.owner_id,
+            visibility=flow.visibility,
+            created_by=created_by,
+        )
 
     async def update_schedule(
         self,
         schedule_id: str,
         definition: ScheduleDefinition,
         expected_revision: int | None,
+        created_by: str = "local-operator",
     ) -> ScheduleRecord | None:
-        await self._validate_schedule(definition)
+        flow = await self._validate_schedule(definition)
         next_run = self._next_occurrence(definition, utc_now()) if definition.enabled else None
         return await self.storage.update_schedule(
-            schedule_id, definition, expected_revision, next_run
+            schedule_id,
+            definition,
+            expected_revision,
+            next_run,
+            owner_id=flow.owner_id,
+            visibility=flow.visibility,
         )
 
-    async def trigger_schedule(self, schedule_id: str) -> RunRecord:
+    async def trigger_schedule(
+        self, schedule_id: str, created_by: str = "local-operator"
+    ) -> RunRecord:
         schedule = await self.storage.get_schedule(schedule_id)
         if schedule is None:
             raise KeyError(schedule_id)
@@ -118,12 +168,15 @@ class CrawlerService:
                 flow_id=schedule.flow_id,
                 parameters=schedule.parameters,
                 idempotency_key=f"schedule:{schedule.id}:manual:{uuid.uuid4()}",
-            )
+            ),
+            created_by=created_by,
         )
         await self.storage.record_manual_schedule_run(schedule.id, run.id)
         return run
 
-    async def create_run(self, request: RunCreate) -> RunRecord:
+    async def create_run(
+        self, request: RunCreate, created_by: str = "local-operator"
+    ) -> RunRecord:
         flow = await self.storage.get_flow(request.flow_id)
         if flow is None:
             raise KeyError(request.flow_id)
@@ -134,7 +187,7 @@ class CrawlerService:
         except ValidationError as error:
             raise InvalidParameters(error.message) from error
         run, created = await self.storage.create_run(
-            flow, request.parameters, request.idempotency_key
+            flow, request.parameters, request.idempotency_key, created_by
         )
         if created:
             await self._write_event(
@@ -256,7 +309,8 @@ class CrawlerService:
                     flow_id=schedule.flow_id,
                     parameters=schedule.parameters,
                     idempotency_key=f"schedule:{schedule.id}:{fired_at.astimezone(timezone.utc).isoformat()}",
-                )
+                ),
+                created_by="scheduler",
             )
             run_id = run.id
         except Exception as error:
@@ -269,8 +323,17 @@ class CrawlerService:
             last_run_id=run_id,
             last_error=error_message,
         )
+        await self.storage.add_audit(
+            actor_user_id=None,
+            actor_username="scheduler",
+            action="schedule.fire",
+            resource_type="schedule",
+            resource_id=schedule.id,
+            outcome="success" if error_message is None else "failed",
+            detail={"runId": run_id, "error": error_message},
+        )
 
-    async def _validate_schedule(self, definition: ScheduleDefinition) -> None:
+    async def _validate_schedule(self, definition: ScheduleDefinition) -> FlowRecord:
         flow = await self.storage.get_flow(definition.flow_id)
         if flow is None:
             raise KeyError(definition.flow_id)
@@ -278,6 +341,7 @@ class CrawlerService:
             validate(instance=definition.parameters, schema=flow.parameter_schema)
         except ValidationError as error:
             raise InvalidParameters(error.message) from error
+        return flow
 
     @staticmethod
     def _next_occurrence(
