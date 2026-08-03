@@ -19,6 +19,9 @@ from .models import (
     FlowRecord,
     FlowVisibility,
     ItemRecord,
+    ImportPreviewItem,
+    ImportEventRecord,
+    ImportStatus,
     NodeCheckpoint,
     RunFlowSnapshot,
     RunRecord,
@@ -27,11 +30,13 @@ from .models import (
     ScheduleRecord,
     UserRecord,
     UserRole,
+    WebsiteImportCreate,
+    WebsiteImportRecord,
     utc_now,
 )
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 MIN_COMPATIBLE_SCHEMA_VERSION = 2
 
 
@@ -176,6 +181,29 @@ CREATE TABLE IF NOT EXISTS schedules (
 );
 CREATE INDEX IF NOT EXISTS idx_schedules_due
   ON schedules(enabled, next_run_at, lease_until);
+CREATE TABLE IF NOT EXISTS website_imports (
+  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, visibility TEXT NOT NULL,
+  status TEXT NOT NULL, source_url TEXT NOT NULL, intent_json TEXT NOT NULL,
+  scope_json TEXT NOT NULL, runtime_preference TEXT NOT NULL,
+  probe_revision INTEGER NOT NULL DEFAULT 0, draft_revision INTEGER NOT NULL DEFAULT 0,
+  preview_revision INTEGER NOT NULL DEFAULT 0, probe_report_json TEXT,
+  flow_draft_json TEXT, created_flow_id TEXT REFERENCES flows(id), confirm_idempotency_key TEXT,
+  error_code TEXT,
+  error_message TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_website_imports_updated ON website_imports(updated_at DESC);
+CREATE TABLE IF NOT EXISTS preview_items (
+  id TEXT PRIMARY KEY, import_id TEXT NOT NULL REFERENCES website_imports(id) ON DELETE CASCADE,
+  draft_revision INTEGER NOT NULL, external_id TEXT NOT NULL, normalized_json TEXT NOT NULL,
+  field_evidence_json TEXT NOT NULL, quality_json TEXT NOT NULL, created_at TEXT NOT NULL,
+  UNIQUE(import_id, draft_revision, external_id)
+);
+CREATE TABLE IF NOT EXISTS import_events (
+  id TEXT PRIMARY KEY, import_id TEXT NOT NULL REFERENCES website_imports(id) ON DELETE CASCADE,
+  sequence INTEGER NOT NULL, type TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL,
+  data_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(import_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_import_events_sequence ON import_events(import_id, sequence);
 """
 
 
@@ -236,6 +264,11 @@ class Storage:
                     await db.execute(
                         f"ALTER TABLE schedules ADD COLUMN {name} {declaration}"
                     )
+            import_columns = {
+                row["name"] for row in await (await db.execute("PRAGMA table_info(website_imports)")).fetchall()
+            }
+            if "confirm_idempotency_key" not in import_columns:
+                await db.execute("ALTER TABLE website_imports ADD COLUMN confirm_idempotency_key TEXT")
             now = utc_now().isoformat()
             await db.execute(
                 """INSERT OR IGNORE INTO users(
@@ -620,6 +653,119 @@ class Storage:
             return self._flow(row) if row else None
         finally:
             await db.close()
+
+    def _website_import(self, row: aiosqlite.Row) -> WebsiteImportRecord:
+        return WebsiteImportRecord(
+            id=row["id"], owner_id=row["owner_id"], visibility=FlowVisibility(row["visibility"]),
+            status=ImportStatus(row["status"]), source_url=row["source_url"],
+            intent=json.loads(row["intent_json"]), scope=json.loads(row["scope_json"]),
+            runtime_preference=row["runtime_preference"], probe_revision=row["probe_revision"],
+            draft_revision=row["draft_revision"], preview_revision=row["preview_revision"],
+            probe_report_json=json.loads(row["probe_report_json"]) if row["probe_report_json"] else None,
+            flow_draft_json=json.loads(row["flow_draft_json"]) if row["flow_draft_json"] else None,
+            created_flow_id=row["created_flow_id"], error_code=row["error_code"], error_message=row["error_message"],
+            created_at=self._dt(row["created_at"]), updated_at=self._dt(row["updated_at"]),
+        )
+
+    async def create_website_import(self, definition: WebsiteImportCreate, owner_id: str) -> WebsiteImportRecord:
+        now = utc_now().isoformat(); import_id = str(uuid.uuid4())
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute("INSERT INTO website_imports(id,owner_id,visibility,status,source_url,intent_json,scope_json,runtime_preference,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (import_id, owner_id, "team", ImportStatus.DRAFT.value, definition.source_url, self._json(definition.intent.model_dump()), self._json(definition.scope.model_dump()), definition.runtime_preference, now, now))
+                await db.commit()
+            finally: await db.close()
+        result = await self.get_website_import(import_id)
+        if result is None: raise RuntimeError("import was not persisted")
+        return result
+
+    async def list_website_imports(self) -> list[WebsiteImportRecord]:
+        db = await self._connect()
+        try: return [self._website_import(row) for row in await (await db.execute("SELECT * FROM website_imports ORDER BY updated_at DESC")).fetchall()]
+        finally: await db.close()
+
+    async def get_website_import(self, import_id: str) -> WebsiteImportRecord | None:
+        db = await self._connect()
+        try:
+            row = await (await db.execute("SELECT * FROM website_imports WHERE id=?", (import_id,))).fetchone()
+            return self._website_import(row) if row else None
+        finally: await db.close()
+
+    async def update_website_import(self, import_id: str, **changes: Any) -> WebsiteImportRecord | None:
+        if not changes: return await self.get_website_import(import_id)
+        allowed = {"status", "probe_revision", "draft_revision", "preview_revision", "probe_report_json", "flow_draft_json", "created_flow_id", "error_code", "error_message"}
+        if set(changes) - allowed: raise ValueError("invalid import update")
+        values = []
+        for key, value in changes.items():
+            values.append(self._json(value) if key.endswith("_json") and value is not None else (value.value if isinstance(value, ImportStatus) else value))
+        assignments = ", ".join(f"{key}=?" for key in changes) + ", updated_at=?"
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                cursor = await db.execute(f"UPDATE website_imports SET {assignments} WHERE id=?", (*values, utc_now().isoformat(), import_id)); await db.commit()
+                if cursor.rowcount != 1: return None
+            finally: await db.close()
+        return await self.get_website_import(import_id)
+
+    async def confirm_website_import(self, import_id: str, definition: FlowDefinition, owner_id: str, idempotency_key: str) -> WebsiteImportRecord | None:
+        """Atomically create revision 1 and make the source Import Job terminal."""
+        now = utc_now(); flow_id = str(uuid.uuid4()); graph = definition.model_dump(mode="json"); visibility = graph.pop("visibility")
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                current = await (await db.execute("SELECT * FROM website_imports WHERE id=?", (import_id,))).fetchone()
+                if current is None: await db.rollback(); return None
+                if current["status"] == ImportStatus.CREATED.value:
+                    if current["confirm_idempotency_key"] != idempotency_key:
+                        raise RevisionConflict(1)
+                    await db.rollback(); return self._website_import(current)
+                if current["status"] != ImportStatus.PREVIEW_READY.value:
+                    await db.rollback(); raise ValueError("preview must complete before confirm")
+                await db.execute("INSERT INTO flows(id,name,description,enabled,max_items,timeout_seconds,parameter_schema_json,graph_json,owner_id,visibility,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (flow_id,definition.name,definition.description,int(definition.enabled),definition.max_items,definition.timeout_seconds,self._json(definition.parameter_schema),self._json(graph),owner_id,visibility,1,now.isoformat(),now.isoformat()))
+                await db.execute("UPDATE website_imports SET status=?, created_flow_id=?, confirm_idempotency_key=?, updated_at=? WHERE id=?", (ImportStatus.CREATED.value,flow_id,idempotency_key,now.isoformat(),import_id))
+                await db.commit()
+            except Exception:
+                await db.rollback(); raise
+            finally: await db.close()
+        return await self.get_website_import(import_id)
+
+    async def replace_preview_items(self, import_id: str, revision: int, items: list[dict[str, Any]]) -> list[ImportPreviewItem]:
+        now = utc_now().isoformat()
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                await db.execute("DELETE FROM preview_items WHERE import_id=? AND draft_revision=?", (import_id, revision))
+                for item in items[:10]:
+                    await db.execute("INSERT INTO preview_items(id,import_id,draft_revision,external_id,normalized_json,field_evidence_json,quality_json,created_at) VALUES(?,?,?,?,?,?,?,?)", (str(uuid.uuid4()), import_id, revision, item["external_id"], self._json(item["normalized_json"]), self._json(item["field_evidence_json"]), self._json(item["quality_json"]), now))
+                await db.commit()
+            finally: await db.close()
+        return await self.list_preview_items(import_id)
+
+    async def list_preview_items(self, import_id: str) -> list[ImportPreviewItem]:
+        db = await self._connect()
+        try:
+            rows = await (await db.execute("SELECT * FROM preview_items WHERE import_id=? ORDER BY created_at,id", (import_id,))).fetchall()
+            return [ImportPreviewItem(id=row["id"], import_id=row["import_id"], draft_revision=row["draft_revision"], external_id=row["external_id"], normalized_json=json.loads(row["normalized_json"]), field_evidence_json=json.loads(row["field_evidence_json"]), quality_json=json.loads(row["quality_json"]), created_at=self._dt(row["created_at"])) for row in rows]
+        finally: await db.close()
+
+    async def add_import_event(self, import_id: str, event_type: str, level: str, message: str, data: dict[str, Any]) -> ImportEventRecord:
+        now = utc_now()
+        async with self._write_lock:
+            db = await self._connect()
+            try:
+                row = await (await db.execute("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM import_events WHERE import_id=?", (import_id,))).fetchone()
+                event = ImportEventRecord(id=str(uuid.uuid4()), import_id=import_id, sequence=int(row["sequence"]), type=event_type, level=level, message=message[:1000], data=data, created_at=now)
+                await db.execute("INSERT INTO import_events(id,import_id,sequence,type,level,message,data_json,created_at) VALUES(?,?,?,?,?,?,?,?)", (event.id,event.import_id,event.sequence,event.type,event.level,event.message,self._json(event.data),now.isoformat()))
+                await db.commit(); return event
+            finally: await db.close()
+
+    async def list_import_events(self, import_id: str, after: int = 0) -> list[ImportEventRecord]:
+        db = await self._connect()
+        try:
+            rows = await (await db.execute("SELECT * FROM import_events WHERE import_id=? AND sequence>? ORDER BY sequence", (import_id, after))).fetchall()
+            return [ImportEventRecord(id=row["id"], import_id=row["import_id"], sequence=row["sequence"], type=row["type"], level=row["level"], message=row["message"], data=json.loads(row["data_json"]), created_at=self._dt(row["created_at"])) for row in rows]
+        finally: await db.close()
 
     async def create_flow(
         self, definition: FlowDefinition, owner_id: str = "local-operator"

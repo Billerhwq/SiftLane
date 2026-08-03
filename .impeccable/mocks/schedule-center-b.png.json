@@ -1,0 +1,8 @@
+{
+  "promptFile": "schedule-center-b.prompt.txt",
+  "approved": true,
+  "approval": "delegated by the user's direct-execution request",
+  "generation": "blocked: OpenAI image endpoint timed out twice",
+  "buildTarget": "Ant Design component grammar plus World Monitor three-column situational topology",
+  "referenceImage": "../references/worldmonitor-dashboard.png"
+}

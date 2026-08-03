@@ -10,7 +10,7 @@ export default defineConfig({
   workers: 1,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: process.env.SIFTLANE_E2E_WEB_BASE_URL ?? "http://127.0.0.1:5173",
     ...(browserChannel ? { channel: browserChannel } : {}),
     actionTimeout: 10_000,
     trace: process.env.CI ? "on-first-retry" : "off",

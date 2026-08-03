@@ -1,130 +1,122 @@
-# Lane Studio Control Room
+# SiftLane Task Scheduling Control Room
 
-This surface brief documents the shipped SiftLane Lane Studio workspace. It replaces the former Cloud Blue Console direction. The root `DESIGN.md` is the normative token source and this file owns composition, view-state, and interaction decisions for the control room.
+This surface brief documents the shipped desktop-Web Task Scheduling center. The root `DESIGN.md` is the normative token source, `documentation/PRD-SiftLane-Task-Scheduling-Center.md` defines the shipped product scope, and this file owns the scheduling page's composition, state, and interaction contract.
 
-## Mode
+## Mode And Scope
 
-**Operate**, with a focused **Read** state for captured article detail. Users build and run declared crawler workflows, inspect live evidence, scan normalized results, and then read the complete captured item without leaving the studio.
+**Operate.** The page lets an operator scan schedule health, locate the next trigger, manage a plan, and enter the corresponding run record without leaving the SiftLane workspace.
+
+This redesign is accepted at 1440x900 and 1280x800 only. It does not state mobile acceptance or mobile capabilities.
 
 ## Direction Contract
 
-- **THESIS:** The crawler lane and its evidence are one continuous workbench. The product refuses detached dashboard cards and transient item-detail overlays.
-- **OWN-WORLD:** A full-viewport white studio, quiet neutral rails, Lane Blue actions, colored node-role tiles, and editorial result detail establish SiftLane's visual identity.
-- **STORY:** Select a flow, inspect or edit the declared DAG, run it, follow live activity, scan results, then switch the center surface to complete article detail and return to the originating row.
-- **FIRST VIEWPORT:** Desktop shows the utility rail, flow library, central graph or evidence surface, inspector, engine state, and live event dock together. Mobile retains only the context needed for the current task and moves secondary rails behind explicit controls.
-- **FORM:** User-approved Lane Studio interpretation of the supplied reference, seed key `a31d7c33`.
+- **THESIS:** Scheduling is a first-class operating center, not a secondary Drawer attached to the workflow editor.
+- **OWN-WORLD:** A bright, continuous SiftLane shell, precise blue action cues, low-radius Ant Design controls, and real operational data define the page.
+- **STORY:** Enter Task Scheduling, scan system state, inspect the exact 24-hour horizon and live signals, select a plan for context, then enter a dedicated management, run, or exception view when the dataset needs sustained work.
+- **FIRST VIEWPORT:** The persistent primary navigation, status strip, schedule header, six-part summary, collapsible left roster, dominant central horizon, bottom signal deck, and collapsible right intelligence Dock remain visible together.
+- **FORM:** Direction contract seed `ec77db1e`.
+
+World Monitor owns the overview topology: a dominant central situation field, peripheral Docks, a bottom live-signal deck, and view switching above the field. It did not supply the visual style, palette, map treatment, or interaction components. Ant Design 6 owns management controls, menus, tables, search and segmented filters, forms, Drawer, confirmations, and tags.
 
 ## Shipped Composition
 
-### Desktop
+### Application Shell
 
-- The application fills the browser viewport without an outer margin and uses a 62px top bar plus a 44px engine/status strip.
-- Four columns organize the working area: 64px utility rail, 248px flow rail, flexible center with a 580px minimum, and 316px inspector.
-- The center stacks a 52px workspace bar, a flexible graph/results/detail view, and a 96px live event dock.
-- The utility rail provides stable icon access to primary product areas. The flow rail carries search, flows, recent runs, and local-network status.
-- Workflow nodes are fixed at 196x110px. Their bodies remain neutral while node-role icon tiles use restrained green, blue, coral, sun, mint, and violet families.
+- The page keeps Task Scheduling in the first-class left navigation beside Workflow Editor, Run History, and Collection Results.
+- The shell uses a 56px top bar and 44px status strip. The navigation is 188px wide at 1440px and compacts to 64px at 1280px.
+- Scheduling replaces the center workspace and hides workflow-only rails, inspector, workspace tabs, and event dock. It does not alter their behavior in the other primary modules.
 
-### Responsive
+### Scheduling Header And Summary
 
-- At 1280px, the columns compact to 60px, 220px, flexible center, and 288px inspector.
-- At 960px and below, the flow rail and inspector become explicit edge panels. The 60px utility rail remains visible until the mobile breakpoint.
-- At 680px and below, the utility rail disappears. The app remains a one-column full-viewport shell, and top-level actions collapse to symbols.
-- In mobile detail mode, top and status rows compress, the workspace tab row disappears, the article receives the flexible center, and every detail command is at least 44px.
+- A stable 60px page header contains the title, refresh, and permission-aware create action.
+- A 44px strip reports total plans, enabled, paused, error, running, and queued counts from current schedule, run, and health data.
 
-## View States
+### View Routing
 
-### Workflow
+- **Situation:** the default information-screen overview for scanning the next 24 hours and current live signals.
+- **Plan management:** a dedicated full-width Ant Design table for search, filtering, selection, and plan actions.
+- **Run records:** a dedicated full-width table with run-specific search and status filters.
+- **Exception center:** a dedicated screen switching between problem schedules and failed runs.
 
-The graph owns the central workspace. A flow runs horizontally through role-colored nodes with visible handles and readable state labels. Selected and running nodes use a 2px Lane Blue boundary and active lift. Completed and failed states use independent green and coral treatments.
+### Collapsible Situation Topology
 
-### Results
+- **Left roster:** Search by schedule or workflow name, filter by all/enabled/paused/error, and scan the scrollable upcoming list sorted by real `next_run_at`.
+- **Center field:** The exact current-time-to-plus-24-hours railway band dominates the workspace, with risk and execution-signal panels docked beneath it.
+- **Right context:** The selected schedule's status, workflow, next/last run, timezone, Cron, and last error sit above a scrollable live run ledger.
 
-The Results tab replaces the graph with a scrollable 7px framed table. The sticky header remains 40px high and result rows remain 52px high regardless of content. Long values truncate in their cells. Pointer activation, Enter, or Space opens the selected item.
+At 1440px the expanded field is 220px / flexible center / 290px. Either side independently collapses to a 44px summary rail, and the preference persists in local storage. At 1280px the right Dock starts collapsed on first use, allowing the central field to own almost the entire available width; users can reopen it at any time. Collapsed controls expose `aria-expanded` and `aria-controls`.
 
-### Item Detail
+## Horizon Contract
 
-Item detail is an independent center panel, never a drawer or dialog. Its sticky toolbar provides return, previous, next, and original-source actions. The document column uses the reading serif for title and body; the adjacent facts column exposes source, author, original publication time, capture time, media type, content length, external ID, and complete metadata.
+- The horizon starts from `Date.now()` and ends exactly 24 hours later.
+- It plots only enabled schedules whose real `next_run_at` lies inside that interval.
+- Each trigger receives its own lane and precise time position; no synthetic recurrence or forecast is generated.
+- All qualifying lanes remain available inside the flexible, vertically scrollable lane region.
+- The axis, current-time rule, event marker, schedule name, workflow name, and exact trigger time provide the complete reading context.
 
-Opening detail moves keyboard focus to its title. Escape returns to Results, left and right arrows navigate adjacent items, and returning restores focus to the originating result row. On small screens the facts column follows the article body so reading width remains stable.
+## Schedule Management
 
-### Live Activity And Ledger
+- Search and segmented filtering update the overview roster and horizon; the plan-management view reuses the same query state for its full dataset.
+- Table rows are pointer and keyboard targets. Enter or Space selects a row and updates the right context panel.
+- CRUD is shipped through the existing schedule API. Create and edit use an Ant Design Drawer and Form; JSON parameters are parsed and validated before submission.
+- Enable/pause, edit, run-now, and delete actions honor the current user's role, schedule ownership/creator relationship, and visibility rules.
+- Run now triggers the schedule, inserts the returned run into current query data, navigates to Run History, and selects that run.
+- A single global atomic mutation lock serializes create, update, enable/pause, run-now, and delete operations; other schedule actions remain disabled until the active mutation finishes.
+- Success and failure feedback is explicit. Delete requires confirmation.
 
-The persistent event dock retains the two latest evidence lines and current connection state. The complete ordered ledger opens upward from that dock without moving the user's canvas, result list, or article position.
+## Component And Token Contract
 
-## Data Collection Journey
-
-The shipped crawl path is observable end to end:
-
-1. A listing request retrieves a news index or hotspot page.
-2. HTML extraction produces article titles and relative or absolute links.
-3. Relative links are resolved against the listing URL.
-4. A loop requests each article detail page.
-5. Detail extraction merges matching body elements and extracts author and publication time.
-6. Emit writes normalized items with article URL, full content, provenance, and nested metadata.
-7. Results expose the normalized rows; item detail exposes the complete captured record.
-
-JSON and JSONP sources may enter through the equivalent JSON extraction path. Metadata templates may use nested structures, and emitted values remain inspectable in the detail facts panel.
-
-## Surface Tokens
-
-Use the root `DESIGN.md` frontmatter as the normative token source. The values that most strongly shape this surface are:
+Ant Design 6 is the authority for management behavior and control state. Lucide provides interface icons with accessible names or tooltips.
 
 ```css
---brand: #3568c8;
---brand-hover: #28539f;
---brand-soft: #edf3ff;
---canvas: #f7f9fc;
---surface: #ffffff;
---surface-subtle: #f6f8fa;
---text: #202124;
---muted: #667085;
---line: #e2e6eb;
---line-strong: #c9d0d9;
---success: #2f7a44;
---warning: #ad6516;
---danger: #be4c45;
---accent-sun: #f0cc68;
---accent-coral: #eaa39d;
---accent-mint: #78bf95;
+--primary: #002fa7;
+--primary-hover: #00257f;
+--primary-soft: #eaf0ff;
+--canvas: #f4f6f9;
+--text: #172033;
+--muted: #657084;
+--line: #d9dde5;
+--success: #16865c;
+--warning: #b96d00;
+--danger: #c53b3f;
 ```
 
-## Motion And Accessibility
+- Radius range: 4-6px.
+- Ant Design base font: 12px.
+- Scheduling operational minimum: 10px.
+- Standard control height: 34px.
+- Dedicated data views use compact, stable Ant Design table rows and internal horizontal scrolling where necessary.
+- Static scheduling regions are flat and separated by hairlines; Drawer, confirmation, and transient feedback may elevate.
 
-- Canvas, result, detail, and empty-state views enter with a bounded 320ms surface transition using `cubic-bezier(.16, 1, .3, 1)`.
-- Engine health uses a slow 2.6s breathing cue. Reduced-motion preference removes all view and health animation.
-- Primary, secondary, icon, tab, node, row, edge-panel, and disclosure controls expose visible hover, selected, and keyboard-focus states.
-- All icon commands use Lucide icons and carry an accessible name or native tooltip.
-- Semantic states combine color with text, icons, or both.
-- Result rows are keyboard targets, detail headings receive programmatic focus, and the list-to-detail-to-list sequence preserves keyboard continuity.
-- Mobile detail commands meet the 44px minimum touch target.
+## Workflow And Results Continuity
 
-## Product Boundary
+The redesign adds scheduling as a peer module without replacing the shipped workflow editor or results experience:
 
-- The visible node vocabulary is `start`, `http_request`, `html_extract`, `json_extract`, `condition`, `loop`, `pagination`, `transform`, and `emit`.
-- The UI presents only local engine evidence and implemented connectors. It does not imply browser automation, authenticated platform adapters, or arbitrary Python/JavaScript execution.
-- Detail values come from the normalized emitted item; absent author or source values use an honest fallback.
-- No production metrics, certified connector claims, customer proof, cloud deployment state, or Docker requirement belongs in this local-only surface.
+- React Flow continues to own workflow composition and node interaction.
+- Run History remains the destination for the run returned by run now.
+- Results remain keyboard-selectable, and captured item detail remains an independent center view rather than a Drawer or dialog.
+- Article detail retains back, previous, next, original-source, focus entry, and originating-row focus restoration.
 
-## Guardrails
+## Accessibility And Boundaries
 
-- Keep the active workflow or evidence view as the largest working region.
-- Keep item detail as a center-view replacement, never a transient overlay.
-- Keep controls, nodes, table rows, and dock regions dimensionally stable.
-- Preserve role accents and semantic green, amber, and coral instead of making every state blue.
-- Avoid bento cards, nested cards, oversized metrics, marketing composition, decorative gradients, glass effects, and text pills.
-- Keep the interface readable at 1440x900 and 390x844 without document-level scrolling or overlapping controls.
+- Primary navigation, view tabs, Dock controls, timeline markers, filters, table rows, row actions, schedule forms, and live ledger entries expose keyboard and focus states.
+- Status combines text or iconography with color.
+- Permission-denied actions are visibly disabled rather than offered optimistically.
+- Empty, loading, no-match, API error, and last-error states use honest data and explicit feedback.
+- The page does not claim unimplemented recurrence forecasts, advanced scheduling policies, batch management, server pagination, saved filters, or mobile behavior.
 
 ## Finish Review
 
 **Disposition: PASS**
 
-- **THESIS: RESOLVED.** Workflow, result evidence, and complete item detail occupy the same center workspace and preserve surrounding context.
-- **OWN-WORLD: RESOLVED.** The full-viewport studio, functional rail, colored node roles, restrained palette, and editorial detail state form a coherent SiftLane identity.
-- **STORY: RESOLVED.** Listing extraction, link resolution, detail requests, full-content extraction, normalized output, result scanning, and detail reading form one visible workflow.
-- **FIRST VIEWPORT: RESOLVED.** Desktop preserves the full operating context. Mobile prioritizes reading and commands while collapsing secondary rails.
-- **FORM: RESOLVED.** The implementation follows the approved Lane Studio direction and the supplied reference without reverting to the old console visual world.
-- **KEYBOARD: RESOLVED.** Detail focus, Escape return, arrow navigation, and row focus restoration complete the result-detail interaction.
-- **MOBILE: RESOLVED.** Detail mode gives the reading surface most of the viewport and expands primary commands to 44px.
-- **CONTRAST: RESOLVED.** Secondary labels and evidence text use the final Measured Gray token against white and quiet surfaces.
+- **THESIS: RESOLVED.** Task Scheduling is a first-class primary module with its own full operating field.
+- **OWN-WORLD: RESOLVED.** SiftLane's bright, compact operations language and Ant Design 6 management grammar are consistent across the page.
+- **STORY: RESOLVED.** Search/filter, selection, CRUD, enable/pause, run now, and run-history navigation form a complete shipped path.
+- **FIRST VIEWPORT: RESOLVED.** The exact 24-hour horizon is dominant; peripheral Docks and the bottom live-signal deck retain context without competing with it.
+- **COLLAPSE: RESOLVED.** Both Docks independently collapse to 44px summaries, restore without data loss, persist locally, and default intelligently at 1280px.
+- **LARGE DATA: RESOLVED.** Plans, runs, and exceptions live in dedicated full-width views; overview feeds are capped and link to the complete datasets.
+- **DATA: RESOLVED.** The horizon uses real `next_run_at`; actions use current role and ownership data; no forecast is fabricated.
+- **KEYBOARD: RESOLVED.** Schedule rows are selectable with Enter and Space, and management controls expose native focus behavior.
+- **CONCURRENCY: RESOLVED.** The global atomic mutation lock prevents overlapping schedule mutations.
 
-Evidence: `outputs/item-detail-desktop.png`, `outputs/item-detail-mobile.png`, plus the existing P1-P5 workflow and operations captures in `outputs/`.
+Evidence: `outputs/p2-scheduler.png` (1440x900 overview), `outputs/p2-scheduler-1280.png` (1280x800 collapsed overview), `outputs/p2-scheduler-plans.png`, and `outputs/p2-scheduler-runs.png`. Mechanical detector result: `[]`. Independent reviewer: final PASS with no material findings.

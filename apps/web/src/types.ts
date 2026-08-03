@@ -1,6 +1,7 @@
 export type NodeType =
   | "start"
   | "http_request"
+  | "browser_request"
   | "html_extract"
   | "json_extract"
   | "condition"
@@ -154,6 +155,11 @@ export interface ItemPage {
   items: ItemRecord[];
   next_cursor: string | null;
 }
+
+export type ImportStatus = "DRAFT" | "PROBING" | "PROBE_READY" | "COMPILING" | "DRAFT_READY" | "PREVIEWING" | "PREVIEW_READY" | "NEEDS_INPUT" | "UNSUPPORTED" | "CREATED" | "FAILED" | "CANCELLED";
+export interface WebsiteImportRecord { id:string; owner_id:string; visibility:FlowVisibility; status:ImportStatus; source_url:string; intent:{description:string;fields:string[];item_type:string}; scope:{follow_details:boolean;preview_pages:number;allowed_domains:string[]}; runtime_preference:string; probe_revision:number;draft_revision:number;preview_revision:number;probe_report_json:Record<string,unknown>|null;flow_draft_json:{field_bindings?:Array<{field:string;selector:string;attribute:string;confidence:number;evidence:string[]}>}|null;created_flow_id:string|null;error_code:string|null;error_message:string|null;created_at:string;updated_at:string }
+export interface ImportPreviewItem { id:string;import_id:string;draft_revision:number;external_id:string;normalized_json:Record<string,unknown>;field_evidence_json:Record<string,unknown>;quality_json:Record<string,unknown>;created_at:string }
+export interface ImportEvent { id:string;import_id:string;sequence:number;type:string;level:string;message:string;data:Record<string,unknown>;created_at:string }
 
 export interface ScheduleDefinition {
   flow_id: string;

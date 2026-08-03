@@ -43,6 +43,10 @@ from .models import (
     FlowRecord,
     FlowVisibility,
     ItemPage,
+    ImportPreviewItem,
+    ImportEventRecord,
+    WebsiteImportCreate,
+    WebsiteImportRecord,
     LoginRequest,
     ManagedConnectorRecord,
     RunCreate,
@@ -726,6 +730,83 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             for flow in await service.storage.list_flows()
             if can_read(actor, flow.owner_id, flow.visibility)
         ]
+
+    async def import_record(import_id: str, actor: Principal, action: str) -> WebsiteImportRecord:
+        record = await service.storage.get_website_import(import_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="import not found")
+        if not can_read(actor, record.owner_id, record.visibility):
+            await deny(actor, action, "website_import", import_id)
+        return record
+
+    @app.get("/api/v1/imports", response_model=list[WebsiteImportRecord])
+    async def list_imports(actor: Actor) -> list[WebsiteImportRecord]:
+        return [record for record in await service.storage.list_website_imports() if can_read(actor, record.owner_id, record.visibility)]
+
+    @app.post("/api/v1/imports", status_code=201, response_model=WebsiteImportRecord)
+    async def create_import(payload: WebsiteImportCreate, actor: Actor) -> WebsiteImportRecord:
+        if actor.role == UserRole.VIEWER:
+            await deny(actor, "import.create", "website_import", None, hide_resource=False)
+        record = await service.create_website_import(payload, actor.id)
+        await audit(actor, "import.create", "website_import", record.id, detail={"source_url": payload.source_url})
+        return record
+
+    @app.get("/api/v1/imports/{import_id}", response_model=WebsiteImportRecord)
+    async def get_import(import_id: str, actor: Actor) -> WebsiteImportRecord:
+        return await import_record(import_id, actor, "import.read")
+
+    @app.post("/api/v1/imports/{import_id}/probe", response_model=WebsiteImportRecord)
+    async def probe_import(import_id: str, actor: Actor) -> WebsiteImportRecord:
+        record = await import_record(import_id, actor, "import.probe")
+        if not can_manage(actor, record.owner_id): await deny(actor, "import.probe", "website_import", import_id)
+        updated = await service.probe_website_import(import_id)
+        await audit(actor, "import.probe", "website_import", import_id, detail={"status": updated.status.value})
+        return updated
+
+    @app.post("/api/v1/imports/{import_id}/compile", response_model=WebsiteImportRecord)
+    async def compile_import(import_id: str, actor: Actor) -> WebsiteImportRecord:
+        record = await import_record(import_id, actor, "import.compile")
+        if not can_manage(actor, record.owner_id): await deny(actor, "import.compile", "website_import", import_id)
+        try: return await service.compile_website_import(import_id)
+        except ValueError as error: raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.post("/api/v1/imports/{import_id}/preview", response_model=list[ImportPreviewItem])
+    async def preview_import(import_id: str, actor: Actor) -> list[ImportPreviewItem]:
+        record = await import_record(import_id, actor, "import.preview")
+        if not can_manage(actor, record.owner_id): await deny(actor, "import.preview", "website_import", import_id)
+        try: return await service.preview_website_import(import_id)
+        except ValueError as error: raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.get("/api/v1/imports/{import_id}/preview-items", response_model=list[ImportPreviewItem])
+    async def preview_items(import_id: str, actor: Actor) -> list[ImportPreviewItem]:
+        await import_record(import_id, actor, "import.preview.read")
+        return await service.storage.list_preview_items(import_id)
+
+    @app.get("/api/v1/imports/{import_id}/events", response_model=list[ImportEventRecord])
+    async def import_events(import_id: str, actor: Actor, after: int = Query(default=0, ge=0)) -> list[ImportEventRecord]:
+        await import_record(import_id, actor, "import.events.read")
+        return await service.storage.list_import_events(import_id, after)
+
+    @app.get("/api/v1/imports/{import_id}/events/stream")
+    async def stream_import_events(import_id: str, request: Request, actor: Actor, after: int = Query(default=0, ge=0), last_event_id: Annotated[str | None, Header()] = None) -> StreamingResponse:
+        await import_record(import_id, actor, "import.events.read")
+        if last_event_id and last_event_id.isdigit(): after = max(after, int(last_event_id))
+        async def events() -> Any:
+            async for event in service.subscribe_import(import_id, after):
+                if await request.is_disconnected(): return
+                if event is None: yield ": heartbeat\n\n"
+                else: yield f"id: {event.sequence}\nevent: {event.type}\ndata: {event.model_dump_json()}\n\n"
+        return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
+
+    @app.post("/api/v1/imports/{import_id}/confirm", response_model=WebsiteImportRecord)
+    async def confirm_import(import_id: str, actor: Actor, idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None) -> WebsiteImportRecord:
+        record = await import_record(import_id, actor, "import.confirm")
+        if not can_manage(actor, record.owner_id): await deny(actor, "import.confirm", "website_import", import_id)
+        if not idempotency_key: raise HTTPException(status_code=400, detail="Idempotency-Key is required")
+        try: updated = await service.confirm_website_import(import_id, actor.id, idempotency_key)
+        except ValueError as error: raise HTTPException(status_code=409, detail=str(error)) from error
+        await audit(actor, "import.confirm", "website_import", import_id, detail={"flow_id": updated.created_flow_id})
+        return updated
 
     @app.post("/api/v1/flows", status_code=201, response_model=FlowRecord)
     async def create_flow(definition: FlowDefinition, actor: Actor) -> FlowRecord:

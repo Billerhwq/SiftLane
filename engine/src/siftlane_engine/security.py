@@ -42,6 +42,7 @@ class SecureHttpClient:
         self._robots: dict[str, tuple[float, RobotFileParser]] = {}
         self._client = httpx.AsyncClient(
             follow_redirects=False,
+            trust_env=False,
             timeout=httpx.Timeout(settings.request_timeout_seconds),
             headers={"User-Agent": settings.user_agent, "Accept": "*/*"},
         )

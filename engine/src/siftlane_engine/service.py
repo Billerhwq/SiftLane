@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import uuid
 from collections import defaultdict
 from contextlib import suppress
@@ -10,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from croniter import croniter
 from jsonschema import ValidationError, validate
+from bs4 import BeautifulSoup
 
 from .auth import hash_password
 from .config import Settings
@@ -19,12 +22,18 @@ from .models import (
     EventRecord,
     FlowDefinition,
     FlowRecord,
+    FieldBinding,
+    ImportPreviewItem,
+    ImportEventRecord,
+    ImportStatus,
     RunCreate,
     RunRecord,
     RunStatus,
     ScheduleDefinition,
     ScheduleRecord,
     UserRole,
+    WebsiteImportCreate,
+    WebsiteImportRecord,
     utc_now,
 )
 from .security import SecureHttpClient
@@ -46,6 +55,7 @@ class CrawlerService:
         self._scheduler_owner = f"scheduler-{uuid.uuid4()}"
         self._cancelled: dict[str, asyncio.Event] = {}
         self._subscribers: dict[str, set[asyncio.Queue[EventRecord]]] = defaultdict(set)
+        self._import_subscribers: dict[str, set[asyncio.Queue[ImportEventRecord]]] = defaultdict(set)
         self.ready = False
 
     @property
@@ -125,6 +135,111 @@ class CrawlerService:
         self, definition: FlowDefinition, owner_id: str = "local-operator"
     ) -> FlowRecord:
         return await self.storage.create_flow(definition, owner_id)
+
+    async def create_website_import(self, definition: WebsiteImportCreate, owner_id: str) -> WebsiteImportRecord:
+        record = await self.storage.create_website_import(definition, owner_id)
+        await self._write_import_event(record.id, "import.created", "info", "Import job created", {"sourceUrl": record.source_url})
+        return record
+
+    async def probe_website_import(self, import_id: str) -> WebsiteImportRecord:
+        record = await self.storage.get_website_import(import_id)
+        if record is None: raise KeyError(import_id)
+        record = await self.storage.update_website_import(import_id, status=ImportStatus.PROBING)
+        assert record is not None
+        await self._write_import_event(import_id, "probe.started", "info", "Probe started", {})
+        try:
+            response = await self.http.fetch(record.source_url)
+        except Exception as error:
+            await self._write_import_event(import_id, "import.failed", "error", "Network policy rejected the target", {"code":"NETWORK_POLICY"})
+            return (await self.storage.update_website_import(import_id, status=ImportStatus.UNSUPPORTED, error_code="NETWORK_POLICY", error_message=str(error)))  # type: ignore[return-value]
+        media = response.media_type
+        if media in {"application/json", "application/ld+json"} or response.text().lstrip().startswith(("{", "[")):
+            report = {"strategy":"http_json","canonical_url":response.url,"allowed_domains":[response.url.split("/")[2]],"page_kind":"api","content_type":media,"requires_auth":response.status in {401,403},"robots_allowed":True,"confidence":0.9,"field_candidates":[]}
+        elif media in {"text/html", "application/xhtml+xml"}:
+            soup = BeautifulSoup(response.text(), "html.parser")
+            articles = soup.select("article")
+            report = {"strategy":"http_html","canonical_url":response.url,"allowed_domains":[response.url.split("/")[2]],"page_kind":"listing" if len(articles) >= 2 else "detail","content_type":media,"requires_auth":response.status in {401,403},"robots_allowed":True,"confidence":0.86 if articles else 0.6,"list_candidates":["article"] if articles else [],"field_candidates":[]}
+        else:
+            return (await self.storage.update_website_import(import_id, status=ImportStatus.UNSUPPORTED, error_code="UNSUPPORTED_CONTENT_TYPE", error_message=f"unsupported content type: {media}"))  # type: ignore[return-value]
+        status = ImportStatus.NEEDS_INPUT if report["requires_auth"] else ImportStatus.PROBE_READY
+        await self._write_import_event(import_id, "probe.completed", "success", "Probe completed", {"strategy":report["strategy"]})
+        return (await self.storage.update_website_import(import_id, status=status, probe_revision=record.probe_revision + 1, probe_report_json=report))  # type: ignore[return-value]
+
+    async def compile_website_import(self, import_id: str) -> WebsiteImportRecord:
+        record = await self.storage.get_website_import(import_id)
+        if record is None: raise KeyError(import_id)
+        if record.status != ImportStatus.PROBE_READY: raise ValueError("probe must complete before compile")
+        await self._write_import_event(import_id, "compile.started", "info", "Compiling flow draft", {})
+        report = record.probe_report_json or {}; strategy = report.get("strategy")
+        if strategy not in {"http_html", "http_json"}: raise ValueError("selected strategy requires a dedicated runtime")
+        field_names = record.intent.fields
+        is_json = strategy == "http_json"
+        bindings = [FieldBinding(field=name, selector=(name if is_json else {"title":"h1, h2, h3", "url":"a[href]", "content":"p", "author":".author, .byline", "published_at":"time"}.get(name, f"[data-field='{name}']")), attribute="href" if name == "url" else "text", required=name in {"title", "content", "url"}, confidence=.9, evidence=[]).model_dump() for name in field_names]
+        extract_type = "json_extract" if is_json else "html_extract"
+        extract_config = {"items_path":"data.items", "fields":{b["field"]:{"path":b["selector"]} for b in bindings}, "deduplicate_by":"url"} if is_json else {"item_selector":"article" if report.get("page_kind") == "listing" else "body", "fields":{b["field"]:{"selector":b["selector"],"attribute":b["attribute"]} for b in bindings}, "deduplicate_by":"url"}
+        definition = FlowDefinition(name=f"Import: {record.source_url}", description=record.intent.description, max_items=100, timeout_seconds=300, nodes=[
+            {"id":"start","type":"start","name":"Start","x":0,"y":0,"config":{"urls":[record.source_url]}},
+            {"id":"request","type":"http_request","name":"Fetch source","x":220,"y":0,"config":{"url":"{{url}}","respect_robots":True}},
+            {"id":"extract","type":extract_type,"name":"Extract records","x":440,"y":0,"config":extract_config},
+            {"id":"emit","type":"emit","name":"Preview output","x":660,"y":0,"config":{"fields":{}}},
+        ], edges=[{"id":"start-request","source":"start","target":"request"},{"id":"request-extract","source":"request","target":"extract"},{"id":"extract-emit","source":"extract","target":"emit"}])
+        draft = {"definition":definition.model_dump(mode="json"),"field_bindings":bindings,"assumptions":["Preview is bounded to two pages and ten items"],"warnings":[],"compiler_version":"website-compiler/v1","probe_artifact_id":f"probe-{record.probe_revision}"}
+        await self._write_import_event(import_id, "compile.completed", "success", "Flow draft is ready", {"compilerVersion":"website-compiler/v1"})
+        return (await self.storage.update_website_import(import_id, status=ImportStatus.DRAFT_READY, draft_revision=record.draft_revision + 1, flow_draft_json=draft))  # type: ignore[return-value]
+
+    async def preview_website_import(self, import_id: str) -> list[ImportPreviewItem]:
+        record = await self.storage.get_website_import(import_id)
+        if record is None: raise KeyError(import_id)
+        if record.status not in {ImportStatus.DRAFT_READY, ImportStatus.PREVIEW_READY}: raise ValueError("draft must complete before preview")
+        await self._write_import_event(import_id, "preview.started", "info", "Preview started", {"maxItems":10})
+        response = await self.http.fetch(record.source_url)
+        draft = record.flow_draft_json or {}; bindings = draft.get("field_bindings", []); rows: list[dict[str, Any]] = []
+        if (record.probe_report_json or {}).get("strategy") == "http_json":
+            payload = json.loads(response.text()); source_rows = payload.get("data", {}).get("items", payload if isinstance(payload, list) else [])
+            for item in source_rows[:10]: rows.append({"external_id":str(item.get("url") or item.get("id") or hashlib.sha256(json.dumps(item, sort_keys=True).encode()).hexdigest()),"normalized_json":{b["field"]:item.get(b["selector"], "") for b in bindings},"field_evidence_json":{},"quality_json":{"required_missing":[]}})
+        else:
+            soup = BeautifulSoup(response.text(), "html.parser"); targets = soup.select("article") or [soup]
+            for target in targets[:10]:
+                values = {}; evidence = {}
+                for binding in bindings:
+                    element = target.select_one(binding["selector"]); value = ""
+                    if element: value = element.get(binding["attribute"], "") if binding["attribute"] != "text" else element.get_text(" ", strip=True)
+                    values[binding["field"]] = value; evidence[binding["field"]] = {"selector":binding["selector"],"sample":value[:200]}
+                external = values.get("url") or hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest(); rows.append({"external_id":str(external),"normalized_json":values,"field_evidence_json":evidence,"quality_json":{"required_missing":[b["field"] for b in bindings if b["required"] and not values.get(b["field"])]}})
+        items = await self.storage.replace_preview_items(import_id, record.draft_revision, rows)
+        await self.storage.update_website_import(import_id, status=ImportStatus.PREVIEW_READY, preview_revision=record.preview_revision + 1)
+        await self._write_import_event(import_id, "preview.completed", "success", "Preview completed", {"itemCount":len(items)})
+        return items
+
+    async def confirm_website_import(self, import_id: str, owner_id: str, idempotency_key: str) -> WebsiteImportRecord:
+        record = await self.storage.get_website_import(import_id)
+        if record is None: raise KeyError(import_id)
+        definition = FlowDefinition.model_validate((record.flow_draft_json or {})["definition"])
+        updated = await self.storage.confirm_website_import(import_id, definition, owner_id, idempotency_key)
+        if updated is None: raise KeyError(import_id)
+        if updated.status == ImportStatus.CREATED:
+            await self._write_import_event(import_id, "import.confirmed", "success", "Formal flow created", {"flowId":updated.created_flow_id})
+        return updated
+
+    async def subscribe_import(self, import_id: str, after: int = 0) -> AsyncIterator[ImportEventRecord | None]:
+        queue: asyncio.Queue[ImportEventRecord] = asyncio.Queue(maxsize=200); self._import_subscribers[import_id].add(queue)
+        try:
+            for event in await self.storage.list_import_events(import_id, after):
+                yield event; after = event.sequence
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=self.settings.sse_heartbeat_seconds)
+                    if event.sequence > after: yield event; after = event.sequence
+                except asyncio.TimeoutError:
+                    yield None
+        finally: self._import_subscribers[import_id].discard(queue)
+
+    async def _write_import_event(self, import_id: str, event_type: str, level: str, message: str, data: dict[str, Any]) -> None:
+        event = await self.storage.add_import_event(import_id,event_type,level,message,data)
+        for queue in tuple(self._import_subscribers.get(import_id, ())):
+            if queue.full():
+                with suppress(asyncio.QueueEmpty): queue.get_nowait()
+            queue.put_nowait(event)
 
     async def create_schedule(
         self, definition: ScheduleDefinition, created_by: str = "local-operator"

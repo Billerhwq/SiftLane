@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { memo, type ComponentType } from "react";
 import {
   ArrowRight,
   Braces,
@@ -23,6 +23,7 @@ export interface FlowNodeData extends Record<string, unknown> {
 const icons: Record<NodeType, ComponentType<{ size?: number }>> = {
   start: ArrowRight,
   http_request: Globe2,
+  browser_request: Globe2,
   html_extract: CodeXml,
   json_extract: Braces,
   condition: GitBranch,
@@ -35,6 +36,7 @@ const icons: Record<NodeType, ComponentType<{ size?: number }>> = {
 const labels: Record<NodeType, string> = {
   start: "START",
   http_request: "HTTP",
+  browser_request: "BROWSER",
   html_extract: "HTML",
   json_extract: "JSON",
   condition: "IF",
@@ -58,6 +60,7 @@ function summary(node: FlowNodeRecord): string {
     return `${urls} seed URLs`;
   }
   if (node.type === "http_request") return `GET / ${String(config.url ?? "{{url}}")}`;
+  if (node.type === "browser_request") return `RENDER / ${String(config.url ?? "{{url}}")}`;
   if (node.type === "html_extract") {
     return `${String(config.item_selector || "document")} / ${Object.keys((config.fields as object) ?? {}).length} fields`;
   }
@@ -69,7 +72,7 @@ function summary(node: FlowNodeRecord): string {
   return "normalized items";
 }
 
-export function FlowNodeCard({ data, selected }: NodeProps) {
+export const FlowNodeCard = memo(function FlowNodeCard({ data, selected }: NodeProps) {
   const typed = data as FlowNodeData;
   const node = typed.record;
   const Icon = icons[node.type];
@@ -93,4 +96,4 @@ export function FlowNodeCard({ data, selected }: NodeProps) {
       ) : node.type !== "emit" && <Handle id="default" type="source" position={Position.Right} />}
     </article>
   );
-}
+});

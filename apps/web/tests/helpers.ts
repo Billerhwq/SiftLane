@@ -2,9 +2,12 @@ import type { APIRequestContext, Page } from "@playwright/test";
 
 export const E2E_USERNAME = "admin";
 export const E2E_PASSWORD = "Admin-password-123";
+export const E2E_API_BASE_URL = process.env.SIFTLANE_E2E_API_BASE_URL ?? "http://127.0.0.1:8090";
 
 export async function apiAuthorization(request: APIRequestContext): Promise<Record<string, string>> {
-  const response = await request.post("http://127.0.0.1:8090/api/v1/auth/login", {
+  const healthResponse = await request.get(`${E2E_API_BASE_URL}/health`);
+  if (healthResponse.ok() && (await healthResponse.json() as { authMode?: string }).authMode === "local") return {};
+  const response = await request.post(`${E2E_API_BASE_URL}/api/v1/auth/login`, {
     data: { username: E2E_USERNAME, password: E2E_PASSWORD },
   });
   if (!response.ok()) throw new Error(`E2E login failed: ${response.status()}`);

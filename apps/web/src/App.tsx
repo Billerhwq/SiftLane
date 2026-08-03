@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addEdge,
   applyEdgeChanges,
-  applyNodeChanges,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
   ReactFlow,
+  useNodesState,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -15,6 +15,7 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Menu as AntMenu } from "antd";
 import {
   Activity,
   AlertCircle,
@@ -33,17 +34,16 @@ import {
   ListPlus,
   LockKeyhole,
   LogOut,
-  Menu,
   PanelRight,
+  PanelRightClose,
+  PanelRightOpen,
   Play,
   Plug,
   Plus,
   RefreshCw,
   Repeat2,
   Save,
-  Search,
   Settings2,
-  ShieldCheck,
   Users,
   Workflow,
   X,
@@ -52,10 +52,12 @@ import { API_BASE, api, streamRunEvents } from "./api";
 import { Dialog } from "./components/Dialog";
 import { EventDock } from "./components/EventDock";
 import { FlowNodeCard, type FlowNodeData, type NodeExecutionState } from "./components/FlowNodeCard";
+import { FlowLibrary } from "./components/FlowLibrary";
+import { ImportWorkspace } from "./components/ImportWorkspace";
 import { IntegrationDrawer } from "./components/IntegrationDrawer";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { NodeInspector } from "./components/NodeInspector";
-import { ScheduleDrawer } from "./components/ScheduleDrawer";
+import { TaskScheduleCenter } from "./components/TaskScheduleCenter";
 import { TeamDrawer } from "./components/TeamDrawer";
 import { useMediaQuery, useModalFocus } from "./hooks/useModalFocus";
 import type {
@@ -71,11 +73,12 @@ import type {
 } from "./types";
 
 const nodeTypes = { siftlane: FlowNodeCard };
-type ViewTab = "editor" | "runs" | "results";
+type ViewTab = "library" | "imports" | "editor" | "runs" | "results" | "schedules";
 
 const typeIcons: Record<NodeType, typeof Globe2> = {
   start: ChevronRight,
   http_request: Globe2,
+  browser_request: Globe2,
   html_extract: CodeXml,
   json_extract: Braces,
   condition: GitBranch,
@@ -178,8 +181,9 @@ export function App() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [draft, setDraft] = useState<FlowRecord | null>(null);
+  const [graphNodes, setGraphNodes, applyGraphNodeChanges] = useNodesState<Node<FlowNodeData>>([]);
   const [dirty, setDirty] = useState(false);
-  const [tab, setTab] = useState<ViewTab>("editor");
+  const [tab, setTab] = useState<ViewTab>("library");
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [streamState, setStreamState] = useState<"idle" | "connecting" | "connected" | "disconnected">("idle");
@@ -188,17 +192,15 @@ export function App() {
   const [newName, setNewName] = useState("网页采集流程");
   const [nodeLibrary, setNodeLibrary] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
-  const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [mobileRail, setMobileRail] = useState(false);
   const [mobileInspector, setMobileInspector] = useState(false);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(() => window.localStorage.getItem("siftlane:workflow:inspector") === "collapsed");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const isNarrow = useMediaQuery("(max-width: 900px)");
-  const flowRailRef = useModalFocus<HTMLElement>(isNarrow && mobileRail, () => setMobileRail(false));
+  const compactNav = useMediaQuery("(max-width: 1280px)");
   const inspectorRef = useModalFocus<HTMLDivElement>(isNarrow && mobileInspector, () => setMobileInspector(false));
   const connectorRef = useModalFocus<HTMLElement>(connectorsOpen, () => setConnectorsOpen(false));
-  const scheduleRef = useModalFocus<HTMLDivElement>(schedulesOpen, () => setSchedulesOpen(false));
   const teamRef = useModalFocus<HTMLDivElement>(teamOpen, () => setTeamOpen(false));
 
   useEffect(() => {
@@ -326,13 +328,40 @@ export function App() {
     return states;
   }, [events, selectedRun]);
 
-  const graphNodes = useMemo<Node<FlowNodeData>[]>(() => (draft?.nodes ?? []).map((node) => ({
-    id: node.id,
-    type: "siftlane",
-    position: { x: node.x, y: node.y },
-    selected: node.id === selectedNodeId,
-    data: { record: node, executionState: executionStates.get(node.id) ?? "idle" },
-  })), [draft?.nodes, executionStates, selectedNodeId]);
+  useEffect(() => {
+    const records = draft?.nodes ?? [];
+    setGraphNodes((current) => {
+      const currentById = new Map(current.map((node) => [node.id, node]));
+      let changed = current.length !== records.length;
+      const next = records.map((record) => {
+        const existing = currentById.get(record.id);
+        const executionState = executionStates.get(record.id) ?? "idle";
+        const selected = record.id === selectedNodeId;
+        if (!existing) {
+          changed = true;
+          return {
+            id: record.id,
+            type: "siftlane",
+            position: { x: record.x, y: record.y },
+            selected,
+            data: { record, executionState },
+          };
+        }
+
+        const positionChanged = existing.position.x !== record.x || existing.position.y !== record.y;
+        const dataChanged = existing.data.record !== record || existing.data.executionState !== executionState;
+        if (!positionChanged && !dataChanged && existing.selected === selected) return existing;
+        changed = true;
+        return {
+          ...existing,
+          position: positionChanged ? { x: record.x, y: record.y } : existing.position,
+          selected,
+          data: dataChanged ? { record, executionState } : existing.data,
+        };
+      });
+      return changed ? next : current;
+    });
+  }, [draft?.nodes, executionStates, selectedNodeId, setGraphNodes]);
 
   const graphEdges = useMemo<Edge[]>(() => (draft?.edges ?? []).map((edge) => ({
     ...edge,
@@ -348,17 +377,25 @@ export function App() {
   }, []);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
-    const persisted = changes.filter((change) => change.type === "position" || change.type === "remove");
-    if (!persisted.length) return;
-    const next = applyNodeChanges(persisted, graphNodes);
+    applyGraphNodeChanges(changes);
+    const removedIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id));
+    if (!removedIds.size) return;
     updateDraft((flow) => ({
       ...flow,
-      nodes: flow.nodes.filter((node) => next.some((candidate) => candidate.id === node.id)).map((node) => {
-        const graph = next.find((candidate) => candidate.id === node.id);
-        return graph ? { ...node, x: graph.position.x, y: graph.position.y } : node;
-      }),
+      nodes: flow.nodes.filter((node) => !removedIds.has(node.id)),
+      edges: flow.edges.filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target)),
     }));
-  }, [graphNodes, updateDraft]);
+    setSelectedNodeId((current) => current && removedIds.has(current) ? null : current);
+  }, [applyGraphNodeChanges, updateDraft]);
+
+  const onNodeDragStop = useCallback((_: MouseEvent | TouchEvent, node: Node<FlowNodeData>) => {
+    updateDraft((flow) => ({
+      ...flow,
+      nodes: flow.nodes.map((record) => record.id === node.id
+        ? { ...record, x: node.position.x, y: node.position.y }
+        : record),
+    }));
+  }, [updateDraft]);
 
   const onEdgesChange = useCallback((changes: EdgeChange<Edge>[]) => {
     const persisted = changes.filter((change) => change.type === "remove");
@@ -380,9 +417,15 @@ export function App() {
   const selectedCapability = capabilities.data?.nodeTypes.find((capability) => capability.type === selectedNode?.type);
 
   function chooseFlow(id: string) {
-    if (dirty && !window.confirm("当前修改尚未保存，确定切换流程吗？")) return;
+    if (dirty && !window.confirm("当前修改尚未保存，确定切换流程吗？")) return false;
     setSelectedFlowId(id);
-    setMobileRail(false);
+    setTab("editor");
+    return true;
+  }
+
+  function setInspectorDrawerCollapsed(collapsed: boolean) {
+    window.localStorage.setItem("siftlane:workflow:inspector", collapsed ? "collapsed" : "expanded");
+    setInspectorCollapsed(collapsed);
   }
 
   async function createFlow() {
@@ -481,6 +524,7 @@ export function App() {
     updateDraft((flow) => ({ ...flow, nodes: [...flow.nodes, node] }));
     setSelectedNodeId(id);
     setNodeLibrary(false);
+    setInspectorDrawerCollapsed(false);
     setMobileInspector(true);
   }
 
@@ -495,7 +539,7 @@ export function App() {
   }
 
   const filteredFlows = (flows.data ?? []).filter((flow) => flow.name.toLowerCase().includes(search.toLowerCase()));
-  const error = health.error || capabilities.error || flows.error || runs.error;
+  const error = health.error || capabilities.error || flows.error || runs.error || schedules.error;
   const canCreateFlow = currentUser.data?.role !== "viewer";
   const canManageFlow = Boolean(draft && currentUser.data && (currentUser.data.role === "admin" || currentUser.data.id === draft.owner_id));
   const canRunFlow = Boolean(draft && currentUser.data && (
@@ -512,19 +556,18 @@ export function App() {
   }
 
   return (
-    <main className={`app-shell ${selectedItemId ? "detail-mode" : ""}`}>
+    <main className={`app-shell ${selectedItemId ? "detail-mode" : ""} ${tab === "library" ? "library-mode" : ""} ${tab === "schedules" ? "schedule-mode" : ""} ${inspectorCollapsed ? "inspector-collapsed" : ""}`}>
       <header className="topbar">
-        <button className="mobile-only icon-button" onClick={() => setMobileRail(true)} aria-label="打开流程列表"><Menu size={18} /></button>
         <div className="brand"><span><ChevronRight size={19} /></span><div><strong>Siftlane</strong><small>采集工作室</small></div></div>
-        <div className="breadcrumb"><b>Studio</b><ChevronRight size={13} /><span>{draft?.name ?? "本地工作区"}</span></div>
+        <div className="breadcrumb"><b>SiftLane</b><ChevronRight size={13} /><span>{tab === "schedules" ? "任务调度中心" : tab === "library" ? "流程库" : draft?.name ?? "本地工作区"}</span></div>
         <div className="topbar__actions">
           <a className="icon-button" href={`${API_BASE}/docs`} target="_blank" rel="noreferrer" title="API 帮助" aria-label="打开 API 帮助"><CircleHelp size={18} /></a>
           <button className="icon-button" onClick={() => setEventsExpanded(true)} title="运行事件" aria-label="展开运行事件"><Bell size={18} /></button>
           <button className="icon-button" onClick={() => void Promise.all([health.refetch(), flows.refetch(), runs.refetch()])} title="刷新状态" aria-label="刷新状态"><RefreshCw size={16} /></button>
-          <button className="button primary" disabled={!canCreateFlow} onClick={() => setNewDialog(true)}><Plus size={16} />新建流程</button>
+          <button className="button primary" disabled={!canCreateFlow} onClick={() => setTab("imports")}><Globe2 size={16} />导入网站</button>
           <span className="user-chip"><span className="user-avatar" aria-hidden="true">{currentUser.data.display_name.slice(0, 1).toUpperCase()}</span><span><strong>{currentUser.data.display_name}</strong><small>{currentUser.data.role}</small></span></span>
           {currentUser.data.auth_mode === "team" && <button className="icon-button" onClick={() => void api.logout().then(() => window.location.reload())} title="退出登录" aria-label="退出登录"><LogOut size={16} /></button>}
-          <button className="mobile-only icon-button" onClick={() => setMobileInspector(true)} aria-label="打开设置"><PanelRight size={18} /></button>
+          <button className="mobile-only icon-button" onClick={() => { setInspectorDrawerCollapsed(false); setMobileInspector(true); }} aria-label="打开设置"><PanelRight size={18} /></button>
         </div>
       </header>
 
@@ -538,54 +581,49 @@ export function App() {
       {error && <div className="global-error"><AlertCircle size={16} /><span>无法连接执行引擎：{error instanceof Error ? error.message : "未知错误"}</span><button onClick={() => window.location.reload()}>重新连接</button></div>}
 
       <nav className="utility-rail" aria-label="主功能">
-        <div className="utility-rail__main">
-          <button className={tab === "editor" ? "selected" : ""} onClick={() => { setTab("editor"); setSelectedItemId(null); }} title="流程编排" aria-label="流程编排" aria-current={tab === "editor" ? "page" : undefined}><Workflow size={19} /></button>
-          <button className={tab === "runs" ? "selected" : ""} onClick={() => { setTab("runs"); setSelectedItemId(null); }} title="运行记录" aria-label="查看运行记录" aria-current={tab === "runs" ? "page" : undefined}><Activity size={19} /></button>
-          <button className={tab === "results" ? "selected" : ""} onClick={() => { setTab("results"); setSelectedItemId(null); }} title="采集结果" aria-label="查看采集结果" aria-current={tab === "results" ? "page" : undefined}><Database size={19} /></button>
-          <span />
-          <button onClick={() => setSchedulesOpen(true)} title="调度" aria-label="打开调度"><CalendarClock size={18} /></button>
-          <button onClick={() => setConnectorsOpen(true)} title="连接器" aria-label="打开连接器"><Plug size={18} /></button>
-          {currentUser.data.role === "admin" && <button onClick={() => setTeamOpen(true)} title="团队与安全" aria-label="打开团队与安全"><Users size={18} /></button>}
-        </div>
-        <button onClick={() => { setSelectedNodeId(null); setMobileInspector(true); }} title="工作区设置" aria-label="打开工作区设置"><Settings2 size={18} /></button>
+        <AntMenu
+          mode="inline"
+          inlineCollapsed={compactNav}
+          selectedKeys={[tab === "library" ? "editor" : tab]}
+          onClick={({ key }) => {
+            if (["editor", "imports", "runs", "results", "schedules"].includes(key)) {
+              setTab(key === "editor" ? "library" : key as ViewTab);
+              setSelectedItemId(null);
+              return;
+            }
+            if (key === "connectors") setConnectorsOpen(true);
+            if (key === "team") setTeamOpen(true);
+          }}
+          items={[
+            { key: "editor", icon: <Workflow size={18} />, label: "流程编排" },
+            { key: "imports", icon: <Globe2 size={18} />, label: "导入网站" },
+            { key: "runs", icon: <Activity size={18} />, label: "运行记录" },
+            { key: "results", icon: <Database size={18} />, label: "采集结果" },
+            { key: "schedules", icon: <CalendarClock size={18} />, label: "任务调度" },
+            { type: "divider" },
+            { key: "connectors", icon: <Plug size={18} />, label: "连接器" },
+            ...(currentUser.data.role === "admin" ? [{ key: "team", icon: <Users size={18} />, label: "团队与安全" }] : []),
+          ]}
+        />
+        <AntMenu
+          mode="inline"
+          inlineCollapsed={compactNav}
+          selectable={false}
+          onClick={() => { setSelectedNodeId(null); setInspectorDrawerCollapsed(false); setMobileInspector(true); }}
+          items={[{ key: "settings", icon: <Settings2 size={18} />, label: "工作区设置" }]}
+        />
       </nav>
-
-      <aside ref={flowRailRef} className={`flow-rail ${mobileRail ? "mobile-open" : ""}`} inert={isNarrow && !mobileRail ? true : undefined} aria-hidden={isNarrow && !mobileRail ? true : undefined}>
-        <header><strong>流程</strong><button className="icon-button mobile-only" onClick={() => setMobileRail(false)} aria-label="关闭流程列表"><X size={16} /></button></header>
-        <label className="search-box"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索流程" /></label>
-        <span className="rail-label">已保存</span>
-        <div className="flow-list">
-          {flows.isLoading && <div className="rail-loading"><i /><i /><i /></div>}
-          {filteredFlows.map((flow) => (
-            <button key={flow.id} className={`flow-list__item ${flow.id === selectedFlowId ? "selected" : ""}`} onClick={() => chooseFlow(flow.id)}>
-              <strong>{flow.name}</strong>
-              <code>{flow.id.slice(0, 12)} · REV {String(flow.revision).padStart(2, "0")}</code>
-              <span><em>{flow.nodes.length} 个节点</em><b className={flow.enabled ? "enabled" : "paused"}>{flow.enabled ? "已启用" : "已暂停"}</b></span>
-            </button>
-          ))}
-          {!flows.isLoading && !filteredFlows.length && <div className="rail-empty">没有匹配的流程</div>}
-        </div>
-        <span className="rail-label recent-label">最近运行</span>
-        <div className="recent-runs">
-          {(runs.data ?? []).slice(0, 4).map((run) => (
-            <button key={run.id} onClick={() => { chooseFlow(run.flow_id); setSelectedRunId(run.id); setTab("runs"); }}>
-              <Check size={14} className={`run-${run.status.toLowerCase()}`} />
-              <span><strong>{run.flow_name}</strong><small>{dateTime(run.created_at)} · {run.processed_items} 项</small></span>
-              <code>{duration(run)}</code>
-            </button>
-          ))}
-        </div>
-        <div className="security-note"><ShieldCheck size={15} /><span><strong>安全策略已启用</strong><small>SSRF · robots · rate limit · response size</small></span></div>
-      </aside>
 
       <section className="workspace">
         <header className="workspace-bar">
           <nav aria-label="工作区视图">
+            <button className={tab === "library" ? "selected" : ""} onClick={() => { setTab("library"); setSelectedItemId(null); }}>流程库</button>
+            <button className={tab === "imports" ? "selected" : ""} onClick={() => { setTab("imports"); setSelectedItemId(null); }}>导入网站</button>
             <button className={tab === "editor" ? "selected" : ""} onClick={() => { setTab("editor"); setSelectedItemId(null); }}>编排</button>
             <button className={tab === "runs" ? "selected" : ""} onClick={() => { setTab("runs"); setSelectedItemId(null); }}>运行记录</button>
             <button className={tab === "results" ? "selected" : ""} onClick={() => { setTab("results"); setSelectedItemId(null); }}>结果</button>
           </nav>
-          <div className="workspace-bar__actions">
+          {tab === "editor" && <div className="workspace-bar__actions">
             <div className="node-library-wrap">
               <button className="button" disabled={!draft || tab !== "editor" || !canManageFlow} onClick={() => setNodeLibrary(!nodeLibrary)}><Plus size={14} />添加节点</button>
               {nodeLibrary && (
@@ -600,10 +638,44 @@ export function App() {
             </div>
             <button className="button" disabled={!dirty || busy || !canManageFlow} onClick={() => void saveFlow()}><Save size={14} />保存</button>
             <button className="button primary" disabled={!draft || busy || !canRunFlow} onClick={() => void runFlow()}><Play size={14} fill="currentColor" />运行</button>
-          </div>
+          </div>}
         </header>
 
-        {!draft ? (
+        {tab === "schedules" ? (
+          <TaskScheduleCenter
+            schedules={schedules.data ?? []}
+            flows={flows.data ?? []}
+            runs={runs.data ?? []}
+            health={health.data}
+            loading={schedules.isLoading}
+            currentUser={currentUser.data}
+            onChanged={() => { void schedules.refetch(); void runs.refetch(); }}
+            onRun={(run) => {
+              setSelectedFlowId(run.flow_id);
+              setSelectedRunId(run.id);
+              setTab("runs");
+              queryClient.setQueryData<RunRecord[]>(["runs"], (current = []) => [run, ...current.filter((item) => item.id !== run.id)]);
+            }}
+            onToast={(kind, message) => setToast({ kind, message })}
+          />
+        ) : tab === "imports" ? (
+          <ImportWorkspace onCreated={() => { void flows.refetch(); }} />
+        ) : tab === "library" ? (
+          <FlowLibrary
+            flows={filteredFlows}
+            runs={runs.data ?? []}
+            loading={flows.isLoading}
+            query={search}
+            selectedFlowId={selectedFlowId}
+            onQueryChange={setSearch}
+            onOpen={chooseFlow}
+            onOpenRun={(run) => {
+              if (!chooseFlow(run.flow_id)) return;
+              setSelectedRunId(run.id);
+              setTab("runs");
+            }}
+          />
+        ) : !draft ? (
           <div className="workspace-empty">
             <div className="workspace-empty-visual" aria-hidden="true"><i /><i /><i /><span /><span /></div>
             <h1>还没有流程</h1><p>创建第一个流程后，采集链路会显示在这里。</p><button className="button primary" onClick={() => setNewDialog(true)}><Plus size={15} />新建流程</button>
@@ -616,9 +688,10 @@ export function App() {
               edges={graphEdges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
+              onNodeDragStop={onNodeDragStop}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
-              onNodeClick={(_, node) => { setSelectedNodeId(node.id); setMobileInspector(true); }}
+              onNodeClick={(_, node) => { setSelectedNodeId(node.id); setInspectorDrawerCollapsed(false); setMobileInspector(true); }}
               onPaneClick={() => setSelectedNodeId(null)}
               deleteKeyCode={null}
               fitView
@@ -645,41 +718,39 @@ export function App() {
           />
         )}
 
-        <EventDock run={selectedRun} events={events} expanded={eventsExpanded} onExpandedChange={setEventsExpanded} onCancel={() => void cancelRun()} streamState={streamState} />
+        {tab !== "schedules" && tab !== "library" && <EventDock run={selectedRun} events={events} expanded={eventsExpanded} onExpandedChange={setEventsExpanded} onCancel={() => void cancelRun()} streamState={streamState} />}
       </section>
 
-      <div ref={inspectorRef} className={`inspector-wrap ${mobileInspector ? "mobile-open" : ""}`} inert={isNarrow && !mobileInspector ? true : undefined} aria-hidden={isNarrow && !mobileInspector ? true : undefined}>
-        <button className="mobile-only inspector-close icon-button" onClick={() => setMobileInspector(false)} aria-label="关闭设置"><X size={16} /></button>
-        {selectedNode && draft ? (
-          <NodeInspector
-            node={selectedNode}
-            capability={selectedCapability}
-            readOnly={!canManageFlow}
-            onChange={(node) => canManageFlow && updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((item) => item.id === node.id ? node : item) }))}
-            onDelete={() => canManageFlow && removeNode()}
-          />
-        ) : draft ? (
-          <FlowInspector flow={draft} run={selectedRun} readOnly={!canManageFlow} onChange={(flow) => { setDraft(flow); setDirty(true); }} onDelete={() => void deleteFlow()} />
-        ) : <aside className="inspector blank"><Settings2 size={24} /><p>选择流程或节点后查看设置</p></aside>}
-      </div>
-
-      {schedulesOpen && (
-        <div ref={scheduleRef} className="side-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSchedulesOpen(false)}>
-          <ScheduleDrawer
-            schedules={schedules.data ?? []}
-            flows={flows.data ?? []}
-            loading={schedules.isLoading}
-            onClose={() => setSchedulesOpen(false)}
-            onChanged={() => { void schedules.refetch(); void runs.refetch(); }}
-            onRun={(run) => {
-              setSelectedFlowId(run.flow_id);
-              setSelectedRunId(run.id);
-              setTab("runs");
-              queryClient.setQueryData<RunRecord[]>(["runs"], (current = []) => [run, ...current.filter((item) => item.id !== run.id)]);
-            }}
-            onToast={(kind, message) => setToast({ kind, message })}
-            currentUser={currentUser.data}
-          />
+      {tab !== "library" && tab !== "schedules" && (
+        <div id="workflow-inspector-content" ref={inspectorRef} className={`inspector-wrap ${inspectorCollapsed ? "is-collapsed" : ""} ${mobileInspector ? "mobile-open" : ""}`} inert={isNarrow && !mobileInspector ? true : undefined} aria-hidden={isNarrow && !mobileInspector ? true : undefined}>
+          <button
+            className="inspector-drawer-toggle icon-button"
+            onClick={() => setInspectorDrawerCollapsed(!inspectorCollapsed)}
+            aria-label={inspectorCollapsed ? `展开${selectedNode ? "节点设置" : "流程设置"}` : `收起${selectedNode ? "节点设置" : "流程设置"}`}
+            aria-expanded={!inspectorCollapsed}
+            aria-controls="workflow-inspector-content"
+            title={inspectorCollapsed ? "展开设置" : "收起设置"}
+          >
+            {inspectorCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          </button>
+          {inspectorCollapsed ? (
+            <div className="inspector-collapsed-summary"><Settings2 size={16} /><span>{selectedNode ? "节点设置" : "流程设置"}</span><b>{draft ? `R${draft.revision}` : "--"}</b></div>
+          ) : (
+            <>
+              <button className="mobile-only inspector-close icon-button" onClick={() => setMobileInspector(false)} aria-label="关闭设置"><X size={16} /></button>
+              {selectedNode && draft ? (
+                <NodeInspector
+                  node={selectedNode}
+                  capability={selectedCapability}
+                  readOnly={!canManageFlow}
+                  onChange={(node) => canManageFlow && updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((item) => item.id === node.id ? node : item) }))}
+                  onDelete={() => canManageFlow && removeNode()}
+                />
+              ) : draft ? (
+                <FlowInspector flow={draft} run={selectedRun} readOnly={!canManageFlow} onChange={(flow) => { setDraft(flow); setDirty(true); }} onDelete={() => void deleteFlow()} />
+              ) : <aside className="inspector blank"><Settings2 size={24} /><p>选择流程或节点后查看设置</p></aside>}
+            </>
+          )}
         </div>
       )}
 
@@ -701,7 +772,6 @@ export function App() {
       </Dialog>
 
       {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === "success" ? <Check size={15} /> : <AlertCircle size={15} />}<span>{toast.message}</span><button onClick={() => setToast(null)} aria-label="关闭"><X size={14} /></button></div>}
-      {mobileRail && <div className="mobile-scrim" onClick={() => setMobileRail(false)} />}
       {mobileInspector && <div className="mobile-scrim inspector-scrim" onClick={() => setMobileInspector(false)} />}
     </main>
   );

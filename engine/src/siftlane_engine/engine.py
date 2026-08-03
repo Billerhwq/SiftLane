@@ -208,6 +208,8 @@ class FlowEngine:
             return {"default": self._start(node, context)}, 0
         if node.type == NodeType.HTTP_REQUEST:
             return {"default": await self._request(node, inputs, context)}, 0
+        if node.type == NodeType.BROWSER_REQUEST:
+            return {"default": await self._browser_request(node, inputs, context)}, 0
         if node.type == NodeType.HTML_EXTRACT:
             return {"default": self._html_extract(node, inputs, context)}, 0
         if node.type == NodeType.JSON_EXTRACT:
@@ -335,6 +337,40 @@ class FlowEngine:
                     "response_headers": response.headers,
                 }
             )
+        return result
+
+    async def _browser_request(self, node: FlowNode, inputs: list[dict[str, Any]], context: ExecutionContext) -> list[dict[str, Any]]:
+        """Run a short-lived Playwright context with a strict top-level domain allowlist."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError as error:
+            raise RuntimeError("Browser Worker is unavailable; install the Playwright engine extra") from error
+        allowed = {str(domain).lower() for domain in node.config.get("allowed_domains", [])}
+        if not allowed: raise ValueError("browser_request requires allowed_domains")
+        timeout_ms = int(float(node.config.get("timeout_seconds", 30)) * 1000)
+        result: list[dict[str, Any]] = []
+        async with async_playwright() as playwright:
+            import os
+            executable = os.environ.get("SIFTLANE_ENGINE_BROWSER_EXECUTABLE")
+            browser = await playwright.chromium.launch(headless=True, executable_path=executable or None)
+            try:
+                for item in inputs[: context.flow.max_items]:
+                    self._check_cancelled(context); url = self._template(str(node.config.get("url", "{{url}}")), item)
+                    from urllib.parse import urlparse
+                    if (urlparse(url).hostname or "").lower() not in allowed: raise ValueError("browser navigation is outside allowed domains")
+                    page = await browser.new_page()
+                    async def route_handler(route):
+                        host = (urlparse(route.request.url).hostname or "").lower()
+                        if host not in allowed or route.request.resource_type in {"media", "font"}: await route.abort()
+                        else: await route.continue_()
+                    await page.route("**/*", route_handler)
+                    await page.goto(url, wait_until=str(node.config.get("wait_until", "domcontentloaded")), timeout=timeout_ms)
+                    selector = str(node.config.get("wait_for_selector", "")).strip()
+                    if selector: await page.wait_for_selector(selector, timeout=timeout_ms)
+                    result.append({**item, "url": page.url, "body": await page.content(), "media_type": "text/html", "browser": True})
+                    await page.close()
+            finally:
+                await browser.close()
         return result
 
     async def _fetch_with_fallback(

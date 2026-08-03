@@ -1,0 +1,8 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop web application composition study, 1536x1024 viewport
+Primary request: Design a complete SiftLane task scheduling center screen for a visual crawler workflow product. Make a dense Ant Design schedule table the primary surface with sortable columns, filters, status, next/last run, and restrained row actions. Above the table, place a thin 24-hour dispatch horizon that visualizes upcoming task fires and current time. On the right, an anchored detail inspector shows the selected schedule, recent runs, and action buttons. Keep the global left navigation and top health bar visible.
+Style/medium: flat matte production UI screenshot, light mode, rigorous enterprise operations interface with World Monitor-like whole-system awareness
+Composition/framing: exact desktop app screenshot, edge-to-edge browser viewport, no browser chrome, no device frame, no perspective; 72px left navigation, 56px header, compact top horizon, table fills most of center, 300px selected-task inspector on right
+Color palette: pure white and neutral #F5F7FA surfaces, graphite text, hairline gray boundaries, one blue action/selection accent, semantic status colors only
+Text (verbatim): "SIFTLANE" and "任务调度中心" are the only fully legible text; all other text appears as restrained indistinct UI lines
+Constraints: 6px or smaller radii, compact controls, stable table rows, one continuous workspace, no marketing hero, no illustrations, no map, no fabricated data, no card wall, no gradients, no glass, no purple, no oversized headings, no dark theme, no watermark

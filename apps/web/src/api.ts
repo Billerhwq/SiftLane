@@ -22,6 +22,8 @@ import type {
   SecretScope,
   UserRecord,
   UserRole,
+  WebsiteImportRecord,
+  ImportPreviewItem,
 } from "./types";
 
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8090").replace(/\/$/, "");
@@ -156,6 +158,12 @@ export const api = {
   flows: () => request<FlowRecord[]>("/api/v1/flows"),
   createFlow: (definition: FlowDefinition) =>
     request<FlowRecord>("/api/v1/flows", { method: "POST", body: JSON.stringify(definition) }),
+  imports: () => request<WebsiteImportRecord[]>("/api/v1/imports"),
+  createImport: (payload: { source_url:string; intent:{description:string;fields:string[];item_type:string}; scope:{follow_details:boolean;preview_pages:number;allowed_domains:string[]}; runtime_preference:string }) => request<WebsiteImportRecord>("/api/v1/imports", {method:"POST",body:JSON.stringify(payload)}),
+  probeImport: (id:string) => request<WebsiteImportRecord>(`/api/v1/imports/${id}/probe`, {method:"POST"}),
+  compileImport: (id:string) => request<WebsiteImportRecord>(`/api/v1/imports/${id}/compile`, {method:"POST"}),
+  previewImport: (id:string) => request<ImportPreviewItem[]>(`/api/v1/imports/${id}/preview`, {method:"POST"}),
+  confirmImport: (id:string) => request<WebsiteImportRecord>(`/api/v1/imports/${id}/confirm`, {method:"POST", headers:{"Idempotency-Key":crypto.randomUUID()}}),
   updateFlow: (flow: FlowRecord) => {
     const definition: FlowDefinition = {
       name: flow.name,

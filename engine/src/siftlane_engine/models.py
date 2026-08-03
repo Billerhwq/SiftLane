@@ -18,6 +18,7 @@ def utc_now() -> datetime:
 class NodeType(StrEnum):
     START = "start"
     HTTP_REQUEST = "http_request"
+    BROWSER_REQUEST = "browser_request"
     HTML_EXTRACT = "html_extract"
     JSON_EXTRACT = "json_extract"
     CONDITION = "condition"
@@ -25,6 +26,25 @@ class NodeType(StrEnum):
     PAGINATION = "pagination"
     TRANSFORM = "transform"
     EMIT = "emit"
+
+
+class ImportStatus(StrEnum):
+    DRAFT = "DRAFT"
+    PROBING = "PROBING"
+    PROBE_READY = "PROBE_READY"
+    COMPILING = "COMPILING"
+    DRAFT_READY = "DRAFT_READY"
+    PREVIEWING = "PREVIEWING"
+    PREVIEW_READY = "PREVIEW_READY"
+    NEEDS_INPUT = "NEEDS_INPUT"
+    UNSUPPORTED = "UNSUPPORTED"
+    CREATED = "CREATED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+    @property
+    def terminal(self) -> bool:
+        return self in {self.UNSUPPORTED, self.CREATED, self.CANCELLED}
 
 
 NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
@@ -56,6 +76,18 @@ NODE_CONFIG_SCHEMAS: dict[NodeType, dict[str, Any]] = {
             "force_http": {"type": "boolean"},
             "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 120},
         },
+        "additionalProperties": False,
+    },
+    NodeType.BROWSER_REQUEST: {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "minLength": 1},
+            "wait_until": {"type": "string", "enum": ["domcontentloaded", "networkidle"]},
+            "wait_for_selector": {"type": "string", "maxLength": 1000},
+            "allowed_domains": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+            "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 60},
+        },
+        "required": ["url", "allowed_domains"],
         "additionalProperties": False,
     },
     NodeType.HTML_EXTRACT: {
@@ -576,6 +608,79 @@ class EventRecord(BaseModel):
 class ItemPage(BaseModel):
     items: list[ItemRecord]
     next_cursor: str | None = None
+
+
+class ImportIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1, max_length=1000)
+    fields: list[str] = Field(min_length=1, max_length=20)
+    item_type: str = Field(default="article", min_length=1, max_length=80)
+
+
+class ImportScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    follow_details: bool = True
+    preview_pages: int = Field(default=2, ge=1, le=2)
+    allowed_domains: list[str] = Field(default_factory=list, max_length=20)
+
+
+class WebsiteImportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_url: str = Field(min_length=8, max_length=4000)
+    intent: ImportIntent
+    scope: ImportScope = Field(default_factory=ImportScope)
+    runtime_preference: str = Field(default="auto", pattern="^(auto|http|browser|connector)$")
+
+
+class FieldBinding(BaseModel):
+    field: str
+    selector: str
+    attribute: str = "text"
+    required: bool = False
+    confidence: float = Field(ge=0, le=1)
+    evidence: list[str] = Field(default_factory=list)
+
+
+class ImportPreviewItem(BaseModel):
+    id: str
+    import_id: str
+    draft_revision: int
+    external_id: str
+    normalized_json: dict[str, Any]
+    field_evidence_json: dict[str, Any]
+    quality_json: dict[str, Any]
+    created_at: datetime
+
+
+class ImportEventRecord(BaseModel):
+    id: str
+    import_id: str
+    sequence: int
+    type: str
+    level: str
+    message: str
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class WebsiteImportRecord(WebsiteImportCreate):
+    id: str
+    owner_id: str
+    visibility: FlowVisibility
+    status: ImportStatus
+    probe_revision: int
+    draft_revision: int
+    preview_revision: int
+    probe_report_json: dict[str, Any] | None = None
+    flow_draft_json: dict[str, Any] | None = None
+    created_flow_id: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class NodeCapability(BaseModel):
